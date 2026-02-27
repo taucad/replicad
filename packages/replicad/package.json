@@ -1,6 +1,6 @@
 {
   "name": "replicad",
-  "version": "0.20.5",
+  "version": "0.21.0-v8.7",
   "description": "The library to build browser based 3D models with code",
   "keywords": [
     "cad",
@@ -34,7 +34,8 @@
     "start": "NO_TYPES=true vite build --watch",
     "build-doc": "typedoc --exclude \"../replicad-opencascadejs/*\" --out docs --theme default src",
     "build-docss": "typedoc --help",
-    "test": "vitest"
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "24.0.1",
@@ -52,7 +53,7 @@
     "jest-matcher-utils": "^29.4.1",
     "jest-svg-snapshot": "^0.1.0",
     "prettier": "^2.4.1",
-    "replicad-opencascadejs": "^0.20.2",
+    "replicad-opencascadejs": "file:../replicad-opencascadejs",
     "rollup": "3.28.0",
     "rollup-plugin-ts": "3.4.4",
     "typedoc": "^0.28.2",
