@@ -40,10 +40,10 @@ export const makeAx3 = (center: Point, dir: Point, xDir?: Point): gp_Ax3 => {
   let axis: gp_Ax3;
   if (xDir) {
     const xDirection = asDir(xDir);
-    axis = new oc.gp_Ax3_3(origin, direction, xDirection);
+    axis = new oc.gp_Ax3(origin, direction, xDirection);
     xDirection.delete();
   } else {
-    axis = new oc.gp_Ax3_5(origin, direction);
+    axis = new oc.gp_Ax3(origin, direction);
   }
   origin.delete();
   direction.delete();
@@ -58,10 +58,10 @@ export const makeAx2 = (center: Point, dir: Point, xDir?: Point): gp_Ax2 => {
   let axis: gp_Ax2;
   if (xDir) {
     const xDirection = asDir(xDir);
-    axis = new oc.gp_Ax2_2(origin, direction, xDirection);
+    axis = new oc.gp_Ax2(origin, direction, xDirection);
     xDirection.delete();
   } else {
-    axis = new oc.gp_Ax2_4(origin, direction);
+    axis = new oc.gp_Ax2(origin, direction);
   }
   origin.delete();
   direction.delete();
@@ -72,7 +72,7 @@ export const makeAx1 = (center: Point, dir: Point): gp_Ax1 => {
   const oc = getOC();
   const origin = asPnt(center);
   const direction = asDir(dir);
-  const axis = new oc.gp_Ax1_2(origin, direction);
+  const axis = new oc.gp_Ax1(origin, direction);
   origin.delete();
   direction.delete();
   return axis;
@@ -82,12 +82,12 @@ const makeVec = (vector: Point = [0, 0, 0]): gp_Vec => {
   const oc = getOC();
 
   if (Array.isArray(vector)) {
-    if (vector.length === 3) return new oc.gp_Vec_4(...vector);
-    else if (vector.length === 2) return new oc.gp_Vec_4(...vector, 0);
+    if (vector.length === 3) return new oc.gp_Vec(...vector);
+    else if (vector.length === 2) return new oc.gp_Vec(...vector, 0);
   } else if (vector instanceof Vector) {
-    return new oc.gp_Vec_3(vector.wrapped.XYZ());
-  } else if (vector.XYZ) return new oc.gp_Vec_3(vector.XYZ());
-  return new oc.gp_Vec_4(0, 0, 0);
+    return new oc.gp_Vec(vector.wrapped.XYZ());
+  } else if (vector.XYZ) return new oc.gp_Vec(vector.XYZ());
+  return new oc.gp_Vec(0, 0, 0);
 };
 
 export class Vector extends WrappingObj<gp_Vec> {
@@ -175,11 +175,11 @@ export class Vector extends WrappingObj<gp_Vec> {
   }
 
   toPnt(): gp_Pnt {
-    return new this.oc.gp_Pnt_2(this.wrapped.XYZ());
+    return new this.oc.gp_Pnt(this.wrapped.XYZ());
   }
 
   toDir(): gp_Dir {
-    return new this.oc.gp_Dir_4(this.wrapped.XYZ());
+    return new this.oc.gp_Dir(this.wrapped.XYZ());
   }
 
   rotate(
@@ -228,7 +228,7 @@ type CoordSystem = "reference" | { origin: Point; zDir: Point; xDir: Point };
 export class Transformation extends WrappingObj<gp_Trsf> {
   constructor(transform?: gp_Trsf) {
     const oc = getOC();
-    super(transform || new oc.gp_Trsf_1());
+    super(transform || new oc.gp_Trsf());
   }
 
   translate(xDist: number, yDist: number, zDist: number): Transformation;
@@ -244,7 +244,7 @@ export class Transformation extends WrappingObj<gp_Trsf> {
         : xDistOrVector
     );
 
-    this.wrapped.SetTranslation_1(translation.wrapped);
+    this.wrapped.SetTranslation(translation.wrapped);
 
     return this;
   }
@@ -256,9 +256,9 @@ export class Transformation extends WrappingObj<gp_Trsf> {
   ): Transformation {
     const dir = asDir(direction);
     const origin = asPnt(position);
-    const axis = new this.oc.gp_Ax1_2(origin, dir);
+    const axis = new this.oc.gp_Ax1(origin, dir);
 
-    this.wrapped.SetRotation_1(axis, angle * DEG2RAD);
+    this.wrapped.SetRotation(axis, angle * DEG2RAD);
     axis.delete();
     dir.delete();
     origin.delete();
@@ -288,7 +288,7 @@ export class Transformation extends WrappingObj<gp_Trsf> {
     }
 
     const mirrorAxis = r(makeAx2(origin, direction));
-    this.wrapped.SetMirror_3(mirrorAxis);
+    this.wrapped.SetMirror(mirrorAxis);
 
     return this;
   }
@@ -304,16 +304,16 @@ export class Transformation extends WrappingObj<gp_Trsf> {
     const r = GCWithScope();
     const fromAx = r(
       fromSystem === "reference"
-        ? new this.oc.gp_Ax3_1()
+        ? new this.oc.gp_Ax3()
         : makeAx3(fromSystem.origin, fromSystem.zDir, fromSystem.xDir)
     );
 
     const toAx = r(
       toSystem === "reference"
-        ? new this.oc.gp_Ax3_1()
+        ? new this.oc.gp_Ax3()
         : makeAx3(toSystem.origin, toSystem.zDir, toSystem.xDir)
     );
-    this.wrapped.SetTransformation_1(fromAx, toAx);
+    this.wrapped.SetTransformation(fromAx, toAx);
     return this;
   }
 
@@ -325,7 +325,7 @@ export class Transformation extends WrappingObj<gp_Trsf> {
   }
 
   transform(shape: TopoDS_Shape): TopoDS_Shape {
-    const transformer = new this.oc.BRepBuilderAPI_Transform_2(
+    const transformer = new this.oc.BRepBuilderAPI_Transform(
       shape,
       this.wrapped,
       true,
@@ -447,11 +447,11 @@ export class Plane {
   }
 
   _calcTransforms(): void {
-    const globalCoordSystem = new this.oc.gp_Ax3_1();
+    const globalCoordSystem = new this.oc.gp_Ax3();
     const localCoordSystem = makeAx3(this.origin, this.zDir, this.xDir);
 
-    const forwardT = new this.oc.gp_Trsf_1();
-    forwardT.SetTransformation_1(globalCoordSystem, localCoordSystem);
+    const forwardT = new this.oc.gp_Trsf();
+    forwardT.SetTransformation(globalCoordSystem, localCoordSystem);
     this.globalToLocal = new Transformation();
     this.globalToLocal.coordSystemChange("reference", {
       origin: this.origin,
@@ -581,7 +581,7 @@ export class BoundingBox extends WrappingObj<Bnd_Box> {
     const oc = getOC();
     let boundBox = wrapped;
     if (!boundBox) {
-      boundBox = new oc.Bnd_Box_1();
+      boundBox = new oc.Bnd_Box();
     }
     super(boundBox);
   }
@@ -635,10 +635,10 @@ export class BoundingBox extends WrappingObj<Bnd_Box> {
   }
 
   add(other: BoundingBox) {
-    this.wrapped.Add_1(other.wrapped);
+    this.wrapped.Add(other.wrapped);
   }
 
   isOut(other: BoundingBox): boolean {
-    return this.wrapped.IsOut_4(other.wrapped);
+    return this.wrapped.IsOut(other.wrapped);
   }
 }
