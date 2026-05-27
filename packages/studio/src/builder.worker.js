@@ -3,7 +3,6 @@ import * as replicad from "replicad";
 import * as manifoldModule from "manifold-3d";
 
 import initOpenCascade from "./initOCSingle.js";
-import initOpenCascadeWithExceptions from "./initOCWithExceptions.js";
 import { StudioHelper } from "./utils/StudioHelper";
 import { runInContext, buildModuleEvaluator } from "./vm";
 
@@ -135,7 +134,6 @@ const computeLabels = async (code, params) => {
 const SHAPES_MEMORY = {};
 
 const ocVersions = {
-  withExceptions: null,
   single: null,
   current: null,
 };
@@ -143,11 +141,11 @@ const ocVersions = {
 let OC = Promise.reject("OpenCascade not initialized");
 
 function enableExceptions() {
-  if (!ocVersions.withExceptions) {
-    ocVersions.withExceptions = initOpenCascadeWithExceptions();
+  if (!ocVersions.single) {
+    ocVersions.single = initOpenCascade();
   }
   ocVersions.current = "withExceptions";
-  OC = ocVersions.withExceptions;
+  OC = ocVersions.single;
 }
 
 function disableExceptions() {
