@@ -1,5 +1,5 @@
 import { WrappingObj, GCWithScope } from './register.js';
-import { Vector, Point, Plane, PlaneName, asPnt, BoundingBox } from './geom.js';
+import { Vector, Point, Plane, PlaneName, asPnt, BoundingBox, asDir, makePln } from './geom.js';
 import type { Shape3DLike } from './shapeInterfaces.js';
 import { DEG2RAD, HASH_CODE_MAX } from './constants.js';
 import { getOC } from './oclib.js';
@@ -23,9 +23,10 @@ import {
   Adaptor3d_Surface,
   BRepAdaptor_Curve,
   BRepAdaptor_CompCurve,
+  BRepAdaptor_Surface,
 } from 'replicad-opencascadejs';
 import { EdgeFinder, FaceFinder } from './finders/index.js';
-import { rotate, translate, mirror, scale as scaleShape } from './geomHelpers';
+import { rotate, translate, mirror, scale as scaleShape, makePlane } from './geomHelpers';
 import { CurveType, findCurveType } from './definitionMaps';
 
 export type { CurveType };
@@ -209,6 +210,20 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
 
   isEqual(other: AnyShape): boolean {
     return this.wrapped.IsEqual(other.wrapped);
+  }
+
+  /**
+   * Asserts that this shape is a 3D shape (Shell, Solid, CompSolid, or
+   * Compound) and returns it typed as Shape3D. Throws if the shape is not 3D.
+   *
+   * Useful for chaining after operations that return a generic shape type.
+   *
+   */
+  asShape3D(): Shape3D {
+    if (isShape3D(this as unknown as AnyShape)) {
+      return this as unknown as Shape3D;
+    }
+    throw new Error("Shape is not a 3D shape");
   }
 
   /**
@@ -1214,6 +1229,49 @@ export class _3DShape<Type extends TopoDS_Shape>
     const newShape = cast(chamferBuilder.Shape());
     if (!isShape3D(newShape)) throw new Error('Could not chamfer as a 3d shape');
     return newShape;
+  }
+
+  /**
+   * Applies a draft angle to selected faces of the shape.
+   *
+   * A draft angle is a taper applied to faces, commonly used in moulding
+   * and casting to allow parts to be released from a mould. The selected
+   * faces are tilted by the given angle relative to the neutral plane.
+   *
+   * The face finder function receives a `FaceFinder` and should return it
+   * with the desired filters applied to select which faces to draft.
+   *
+   * The neutral plane defines the reference from which the draft angle is
+   * measured — faces are unchanged where they intersect this plane and
+   * taper away from it.
+   *
+   * @category Shape Modifications
+   */
+  draft(
+    angle: number,
+    faceFinder: (e: FaceFinder) => FaceFinder,
+    neutralPlane: Plane | PlaneName = "XY"
+  ) {
+    const oc = getOC();
+    const drafter = new oc.BRepOffsetAPI_DraftAngle_2(this.wrapped);
+
+    const inputPlane = makePlane(neutralPlane);
+    const plane = makePln(inputPlane.origin, inputPlane.zDir);
+    const dir = asDir(inputPlane.zDir);
+
+    const faces = faceFinder(new FaceFinder()).find(this);
+    faces.forEach((f) =>
+      drafter.Add(f.wrapped, dir, angle * DEG2RAD, plane, false)
+    );
+
+    drafter.Build(new oc.Message_ProgressRange_1());
+    const newShape = drafter.ModifiedShape(this.wrapped);
+
+    drafter.delete();
+    plane.delete();
+    dir.delete();
+
+    return cast(newShape);
   }
 }
 

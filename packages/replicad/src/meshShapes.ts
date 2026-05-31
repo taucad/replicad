@@ -16,9 +16,8 @@ const asVec3 = (v: Point): ManifoldVec3 => {
   return res;
 };
 
-const manifoldTransformFromTransformation = (
-  transform: Transformation
-): number[] => {
+const manifoldTransformFromTransformation = (t: Transformation): number[] => {
+  const transform = t.inverted();
   const origin = transform.transformPoint([0, 0, 0]);
   const xPoint = transform.transformPoint([1, 0, 0]);
   const yPoint = transform.transformPoint([0, 1, 0]);
@@ -64,6 +63,10 @@ export class MeshShape
 {
   constructor(manifoldShape: ManifoldInstance) {
     super(manifoldShape);
+    // Force manifold to eagerly process mesh data. Without this, the
+    // internal representation may depend on the input Mesh WASM object
+    // which can be freed before the Manifold is queried.
+    manifoldShape.numVert();
   }
 
   clone(): MeshShape {
@@ -169,8 +172,8 @@ export class MeshShape
   }
 
   mesh(): MeshShapeMesh {
-    const withNormals = this.wrapped.calculateNormals(0, 0.1);
-    const mesh = withNormals.getMesh();
+    const meshSource = this.wrapped.calculateNormals(0, 0.1);
+    const mesh = meshSource.getMesh();
     const numProp = mesh.numProp ?? 3;
 
     const vertProperties = Array.from(mesh.vertProperties);
@@ -235,5 +238,144 @@ export class MeshShape
 
   get isEmpty(): boolean {
     return this.wrapped.isEmpty();
+  }
+
+  /**
+   * Exports the mesh shape as an STL file Blob.
+   *
+   * Since MeshShape is already a triangle mesh, no tessellation parameters
+   * are needed (tolerance/angularTolerance are accepted but ignored for
+   * API compatibility).
+   *
+   * @category Shape Export
+   */
+  blobSTL({ binary = false } = {}): Blob {
+    const { vertices, triangles } = this.mesh();
+    const numTriangles = triangles.length / 3;
+
+    if (binary) {
+      // Binary STL: 80-byte header + 4-byte triangle count + 50 bytes per triangle
+      const bufferSize = 80 + 4 + numTriangles * 50;
+      const buffer = new ArrayBuffer(bufferSize);
+      const view = new DataView(buffer);
+
+      // 80-byte header (zeros)
+      // Triangle count
+      view.setUint32(80, numTriangles, true);
+
+      let offset = 84;
+      for (let i = 0; i < numTriangles; i++) {
+        const i0 = triangles[i * 3];
+        const i1 = triangles[i * 3 + 1];
+        const i2 = triangles[i * 3 + 2];
+
+        const ax = vertices[i0 * 3],
+          ay = vertices[i0 * 3 + 1],
+          az = vertices[i0 * 3 + 2];
+        const bx = vertices[i1 * 3],
+          by = vertices[i1 * 3 + 1],
+          bz = vertices[i1 * 3 + 2];
+        const cx = vertices[i2 * 3],
+          cy = vertices[i2 * 3 + 1],
+          cz = vertices[i2 * 3 + 2];
+
+        // Compute face normal
+        const ux = bx - ax,
+          uy = by - ay,
+          uz = bz - az;
+        const vx = cx - ax,
+          vy = cy - ay,
+          vz = cz - az;
+        let nx = uy * vz - uz * vy;
+        let ny = uz * vx - ux * vz;
+        let nz = ux * vy - uy * vx;
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        if (len > 0) {
+          nx /= len;
+          ny /= len;
+          nz /= len;
+        }
+
+        // Normal
+        view.setFloat32(offset, nx, true);
+        offset += 4;
+        view.setFloat32(offset, ny, true);
+        offset += 4;
+        view.setFloat32(offset, nz, true);
+        offset += 4;
+        // Vertex 1
+        view.setFloat32(offset, ax, true);
+        offset += 4;
+        view.setFloat32(offset, ay, true);
+        offset += 4;
+        view.setFloat32(offset, az, true);
+        offset += 4;
+        // Vertex 2
+        view.setFloat32(offset, bx, true);
+        offset += 4;
+        view.setFloat32(offset, by, true);
+        offset += 4;
+        view.setFloat32(offset, bz, true);
+        offset += 4;
+        // Vertex 3
+        view.setFloat32(offset, cx, true);
+        offset += 4;
+        view.setFloat32(offset, cy, true);
+        offset += 4;
+        view.setFloat32(offset, cz, true);
+        offset += 4;
+        // Attribute byte count
+        view.setUint16(offset, 0, true);
+        offset += 2;
+      }
+
+      return new Blob([buffer], { type: "application/sla" });
+    }
+
+    // ASCII STL
+    const lines: string[] = ["solid mesh"];
+    for (let i = 0; i < numTriangles; i++) {
+      const i0 = triangles[i * 3];
+      const i1 = triangles[i * 3 + 1];
+      const i2 = triangles[i * 3 + 2];
+
+      const ax = vertices[i0 * 3],
+        ay = vertices[i0 * 3 + 1],
+        az = vertices[i0 * 3 + 2];
+      const bx = vertices[i1 * 3],
+        by = vertices[i1 * 3 + 1],
+        bz = vertices[i1 * 3 + 2];
+      const cx = vertices[i2 * 3],
+        cy = vertices[i2 * 3 + 1],
+        cz = vertices[i2 * 3 + 2];
+
+      // Compute face normal
+      const ux = bx - ax,
+        uy = by - ay,
+        uz = bz - az;
+      const vx = cx - ax,
+        vy = cy - ay,
+        vz = cz - az;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      if (len > 0) {
+        nx /= len;
+        ny /= len;
+        nz /= len;
+      }
+
+      lines.push(`facet normal ${nx} ${ny} ${nz}`);
+      lines.push("  outer loop");
+      lines.push(`    vertex ${ax} ${ay} ${az}`);
+      lines.push(`    vertex ${bx} ${by} ${bz}`);
+      lines.push(`    vertex ${cx} ${cy} ${cz}`);
+      lines.push("  endloop");
+      lines.push("endfacet");
+    }
+    lines.push("endsolid mesh");
+
+    return new Blob([lines.join("\n")], { type: "application/sla" });
   }
 }

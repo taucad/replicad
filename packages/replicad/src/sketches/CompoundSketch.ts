@@ -171,8 +171,8 @@ export default class CompoundSketch implements SketchInterface {
    * Revolves the drawing on an axis (defined by its direction and an origin
    * (defaults to the sketch origin)
    */
-  revolve(revolutionAxis?: Point, { origin }: { origin?: Point } = {}): Shape3D {
-    const solid = revolution(this.face(), origin || this.outerSketch.defaultOrigin, revolutionAxis);
+  revolve(revolutionAxis?: Point, { origin, angle }: { origin?: Point; angle?: number } = {}): Shape3D {
+    const solid = revolution(this.face(), origin || this.outerSketch.defaultOrigin, revolutionAxis, angle);
     return solid;
   }
 

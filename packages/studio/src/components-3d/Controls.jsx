@@ -39,7 +39,7 @@ export default React.memo(function Scene({
         ref={controlsRef}
         enableDamping={enableDamping}
       />
-      <Stage constrols={controlsRef} center={center}>
+      <Stage controls={controlsRef} center={center}>
         {children}
       </Stage>
     </>

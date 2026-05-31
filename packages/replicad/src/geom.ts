@@ -10,6 +10,7 @@ import {
   gp_XYZ,
   gp_Dir,
   gp_Pnt,
+  gp_Pln,
   OpenCascadeInstance,
   gp_Trsf,
   TopoDS_Shape,
@@ -49,6 +50,19 @@ export const makeAx3 = (center: Point, dir: Point, xDir?: Point): gp_Ax3 => {
   direction.delete();
   return axis;
 };
+
+export function makePln(origin: Point, dir: Point): gp_Pln {
+  const orig = asPnt(origin);
+  const direction = asDir(dir);
+
+  const oc = getOC();
+  const pln = new oc.gp_Pln_3(orig, direction);
+
+  orig.delete();
+  direction.delete();
+
+  return pln;
+}
 
 export const makeAx2 = (center: Point, dir: Point, xDir?: Point): gp_Ax2 => {
   const oc = getOC();
@@ -231,6 +245,12 @@ export class Transformation extends WrappingObj<gp_Trsf> {
     super(transform || new oc.gp_Trsf());
   }
 
+  clone() {
+    const clone = this.wrapped.Inverted();
+    clone.Invert();
+    return new Transformation(clone);
+  }
+
   translate(xDist: number, yDist: number, zDist: number): Transformation;
   translate(vector: Point): Transformation;
   translate(
@@ -298,6 +318,15 @@ export class Transformation extends WrappingObj<gp_Trsf> {
     this.wrapped.SetScale(pnt, scale);
     pnt.delete();
     return this;
+  }
+
+  inverse(): this {
+    this.wrapped.Invert();
+    return this;
+  }
+
+  inverted(): Transformation {
+    return new Transformation(this.wrapped.Inverted());
   }
 
   coordSystemChange(fromSystem: CoordSystem, toSystem: CoordSystem): this {
