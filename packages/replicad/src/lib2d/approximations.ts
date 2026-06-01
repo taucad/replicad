@@ -108,7 +108,7 @@ export function approximateAsSvgCompatibleCurve(
     }
 
     if (curveType === "BSPLINE_CURVE") {
-      const bspline = adaptor.BSpline().get();
+      const bspline = adaptor.BSpline();
 
       if (!bspline.IsRational()) {
         const c = BSplineToBezier(adaptor);

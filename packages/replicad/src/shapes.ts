@@ -23,7 +23,6 @@ import {
   Adaptor3d_Surface,
   BRepAdaptor_Curve,
   BRepAdaptor_CompCurve,
-  BRepAdaptor_Surface,
 } from 'replicad-opencascadejs';
 import { EdgeFinder, FaceFinder } from './finders/index.js';
 import { rotate, translate, mirror, scale as scaleShape, makePlane } from './geomHelpers';
@@ -362,7 +361,7 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
   protected _mesh({ tolerance = 1e-3, angularTolerance = 0.1 } = {}): void {
     // Clean mesh to allow for coarser tolerance meshing to supercede the mesh living in WASM memory.
     // Without this, coarser tolerance meshing can return a mesh with finer tolerances due to OCCT caching of meshes.
-    this.oc.BRepTools.Clean(this.wrapped, false);
+    this.oc.BRepTools.Clean(this.wrapped);
     new this.oc.BRepMesh_IncrementalMesh(this.wrapped, tolerance, false, angularTolerance, false);
   }
 
@@ -680,7 +679,7 @@ export class Edge extends _1DShape<TopoDS_Edge> {
 
 export class Wire extends _1DShape<TopoDS_Wire> {
   protected _geomAdaptor(): BRepAdaptor_CompCurve {
-    return new this.oc.BRepAdaptor_CompCurve(this.wrapped, false);
+    return new this.oc.BRepAdaptor_CompCurve(this.wrapped);
   }
 
   offset2D(offset: number, kind: 'arc' | 'intersection' | 'tangent' = 'arc'): Wire {
@@ -690,7 +689,7 @@ export class Wire extends _1DShape<TopoDS_Wire> {
       tangent: this.oc.GeomAbs_JoinType.GeomAbs_Tangent,
     };
 
-    const offsetter = new this.oc.BRepOffsetAPI_MakeOffset(this.wrapped, kinds[kind], false);
+    const offsetter = new this.oc.BRepOffsetAPI_MakeOffset(this.wrapped, kinds[kind]);
     offsetter.Perform(offset, 0);
 
     const newShape = cast(offsetter.Shape());
@@ -739,7 +738,7 @@ export class Surface extends WrappingObj<Adaptor3d_Surface> {
 
 export class Face extends Shape<TopoDS_Face> {
   protected _geomAdaptor(): Adaptor3d_Surface {
-    return new this.oc.BRepAdaptor_Surface(this.wrapped, false);
+    return new this.oc.BRepAdaptor_Surface(this.wrapped);
   }
 
   get surface(): Surface {
@@ -795,7 +794,7 @@ export class Face extends Shape<TopoDS_Face> {
     const surface = r(this.oc.BRep_Tool.Surface(this.wrapped));
 
     const projectedPoint = r(
-      new this.oc.GeomAPI_ProjectPointOnSurf(r(asPnt(point)), surface, this.oc.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad),
+      new this.oc.GeomAPI_ProjectPointOnSurf(r(asPnt(point)), surface),
     );
 
     const { U, V } = projectedPoint.LowerDistanceParameters();
@@ -930,8 +929,7 @@ export class _3DShape<Type extends TopoDS_Shape>
    */
   fuse(other: Shape3D, { optimisation = 'none' }: { optimisation?: 'none' | 'commonFace' | 'sameFace' } = {}): Shape3D {
     const r = GCWithScope();
-    const progress = r(new this.oc.Message_ProgressRange());
-    const newBody = r(new this.oc.BRepAlgoAPI_Fuse(this.wrapped, other.wrapped, progress));
+    const newBody = r(new this.oc.BRepAlgoAPI_Fuse(this.wrapped, other.wrapped));
     if (optimisation === 'commonFace') {
       newBody.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueShift);
     }
@@ -939,7 +937,7 @@ export class _3DShape<Type extends TopoDS_Shape>
       newBody.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueFull);
     }
 
-    newBody.Build(progress);
+    newBody.Build();
     newBody.SimplifyResult(true, true, 1e-3);
     const newShape = cast(newBody.Shape());
     if (!isShape3D(newShape)) throw new Error('Could not fuse as a 3d shape');
@@ -954,15 +952,14 @@ export class _3DShape<Type extends TopoDS_Shape>
    */
   cut(tool: Shape3D, { optimisation = 'none' }: { optimisation?: 'none' | 'commonFace' | 'sameFace' } = {}): Shape3D {
     const r = GCWithScope();
-    const progress = r(new this.oc.Message_ProgressRange());
-    const cutter = r(new this.oc.BRepAlgoAPI_Cut(this.wrapped, tool.wrapped, progress));
+    const cutter = r(new this.oc.BRepAlgoAPI_Cut(this.wrapped, tool.wrapped));
     if (optimisation === 'commonFace') {
       cutter.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueShift);
     }
     if (optimisation === 'sameFace') {
       cutter.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueFull);
     }
-    cutter.Build(progress);
+    cutter.Build();
     cutter.SimplifyResult(true, true, 1e-3);
 
     const newShape = cast(cutter.Shape());
@@ -977,9 +974,8 @@ export class _3DShape<Type extends TopoDS_Shape>
    */
   intersect(tool: AnyShape): Shape3D {
     const r = GCWithScope();
-    const progress = r(new this.oc.Message_ProgressRange());
-    const intersector = r(new this.oc.BRepAlgoAPI_Common(this.wrapped, tool.wrapped, progress));
-    intersector.Build(progress);
+    const intersector = r(new this.oc.BRepAlgoAPI_Common(this.wrapped, tool.wrapped));
+    intersector.Build();
     intersector.SimplifyResult(true, true, 1e-3);
 
     const newShape = cast(intersector.Shape());
@@ -1063,7 +1059,6 @@ export class _3DShape<Type extends TopoDS_Shape>
       facesToRemove.Append(face.wrapped);
     });
 
-    const progress = r(new this.oc.Message_ProgressRange());
     const shellBuilder = r(new this.oc.BRepOffsetAPI_MakeThickSolid());
 
     shellBuilder.MakeThickSolidByJoin(
@@ -1076,7 +1071,6 @@ export class _3DShape<Type extends TopoDS_Shape>
       false,
       this.oc.GeomAbs_JoinType.GeomAbs_Arc,
       false,
-      progress,
     );
     const newShape = cast(shellBuilder.Shape());
     if (!isShape3D(newShape)) throw new Error('Could not shell as a 3d shape');
@@ -1250,21 +1244,19 @@ export class _3DShape<Type extends TopoDS_Shape>
   draft(
     angle: number,
     faceFinder: (e: FaceFinder) => FaceFinder,
-    neutralPlane: Plane | PlaneName = "XY"
+    neutralPlane: Plane | PlaneName = 'XY'
   ) {
     const oc = getOC();
-    const drafter = new oc.BRepOffsetAPI_DraftAngle_2(this.wrapped);
+    const drafter = new oc.BRepOffsetAPI_DraftAngle(this.wrapped);
 
     const inputPlane = makePlane(neutralPlane);
     const plane = makePln(inputPlane.origin, inputPlane.zDir);
     const dir = asDir(inputPlane.zDir);
 
     const faces = faceFinder(new FaceFinder()).find(this);
-    faces.forEach((f) =>
-      drafter.Add(f.wrapped, dir, angle * DEG2RAD, plane, false)
-    );
+    faces.forEach((f) => drafter.Add(f.wrapped, dir, angle * DEG2RAD, plane, false));
 
-    drafter.Build(new oc.Message_ProgressRange_1());
+    drafter.Build();
     const newShape = drafter.ModifiedShape(this.wrapped);
 
     drafter.delete();
