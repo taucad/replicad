@@ -9,6 +9,7 @@ additionalCppFiles:
   - wrappers/shape-hasher.cpp
   - wrappers/mesh-extractor.cpp
   - wrappers/edge-mesh-extractor.cpp
+  - wrappers/runtime-info.cpp
   - wrappers/boolean-batch.cpp
   - wrappers/brep-io.cpp
   - wrappers/geom2d-io.cpp

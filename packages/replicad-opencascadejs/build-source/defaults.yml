@@ -281,6 +281,7 @@ bindings:
   - symbol: ReplicadMeshExtractor
   - symbol: ReplicadEdgeMeshData
   - symbol: ReplicadEdgeMeshExtractor
+  - symbol: ReplicadRuntimeInfo
   - symbol: ReplicadBooleanBatchResult
   - symbol: ReplicadBooleanBatch
 
