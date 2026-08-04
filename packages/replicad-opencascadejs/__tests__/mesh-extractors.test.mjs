@@ -9,8 +9,8 @@ import initMulti from "../dist/replicad_multi.js";
 import initSingle from "../dist/replicad_single.js";
 
 const require = createRequire(import.meta.url);
-const initSingleCjs = require("replicad-opencascadejs");
-const initMultiCjs = require("replicad-opencascadejs/multi");
+const initSingleCjs = require("@taulabs/replicad-opencascadejs");
+const initMultiCjs = require("@taulabs/replicad-opencascadejs/multi");
 
 const HASH_CODE_MAX = 2_147_483_647;
 const TOLERANCE = 0.1;

@@ -357,10 +357,12 @@ export class Transformation extends WrappingObj<gp_Trsf> {
     const transformer = new this.oc.BRepBuilderAPI_Transform(
       shape,
       this.wrapped,
-      true,
+      false,
       false
     );
-    return transformer.ModifiedShape(shape);
+    const transformed = transformer.Shape();
+    transformer.delete();
+    return transformed;
   }
 }
 

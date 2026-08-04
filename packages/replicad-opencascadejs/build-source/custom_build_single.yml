@@ -7,4 +7,4 @@ mainBuild:
   #! Pthread workers must instead run Embind registrations at runtime.
   emccFlags: #@ data.values.buildFlags + ["-sEVAL_CTORS=2"]
 
-additionalCppFiles: #@ data.values.additionalCppFiles
+additionalCppFiles: #@ data.values.additionalCppFiles + ["wrappers/runtime-info.cpp", "wrappers/prototype-mesh-extractor.cpp", "wrappers/shape-identity.cpp", "wrappers/boolean-batch.cpp"]

@@ -2,6 +2,10 @@
 // face groups, and edge groups. This preserves the pre-OCCT-8 API contract:
 // TShape plus location, orientation ignored, result in [1, upperBound].
 //
+// Tau also uses ReplicadShapeIdentity for whole-shape prototype and occurrence
+// identity. Neither mechanism replaces the other: these bounded labels map
+// individual faces/edges to render ranges, while identity groups prototypes.
+
 #include <cstdint>
 #include <limits>
 

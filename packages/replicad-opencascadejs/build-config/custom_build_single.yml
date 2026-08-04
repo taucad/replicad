@@ -226,9 +226,11 @@ mainBuild:
   - symbol: TDataStd_GenericExtString
   - symbol: XCAFDoc_LengthUnit
   - symbol: TCollection_ExtendedString
+  - symbol: TCollection_HAsciiString
   - symbol: XCAFDoc_DocumentTool
   - symbol: XCAFDoc_ShapeTool
   - symbol: XCAFDoc_ColorTool
+  - symbol: XCAFDoc_MaterialTool
   - symbol: TDF_Label
   - symbol: TDataStd_Name
   - symbol: Quantity_ColorRGBA
@@ -247,6 +249,15 @@ mainBuild:
   - symbol: ReplicadMeshExtractor
   - symbol: ReplicadEdgeMeshData
   - symbol: ReplicadEdgeMeshExtractor
+  - symbol: ReplicadRuntimeInfo
+  - symbol: ReplicadPrototypeMeshData
+  - symbol: ReplicadPrototypeEdgeMeshData
+  - symbol: ReplicadPrototypeIdData
+  - symbol: ReplicadPrototypeMeshExtractor
+  - symbol: ReplicadShapeIdentityInfo
+  - symbol: ReplicadShapeIdentity
+  - symbol: ReplicadBooleanBatchResult
+  - symbol: ReplicadBooleanBatch
   emccFlags:
   - -fwasm-exceptions
   - -sEXPORT_EXCEPTION_HANDLING_HELPERS
@@ -271,3 +282,7 @@ additionalCppFiles:
 - wrappers/edge-mesh-extractor.cpp
 - wrappers/brep-io.cpp
 - wrappers/geom2d-io.cpp
+- wrappers/runtime-info.cpp
+- wrappers/prototype-mesh-extractor.cpp
+- wrappers/shape-identity.cpp
+- wrappers/boolean-batch.cpp

@@ -255,9 +255,11 @@
     - symbol: TDataStd_GenericExtString
     - symbol: XCAFDoc_LengthUnit
     - symbol: TCollection_ExtendedString
+    - symbol: TCollection_HAsciiString
     - symbol: XCAFDoc_DocumentTool
     - symbol: XCAFDoc_ShapeTool
     - symbol: XCAFDoc_ColorTool
+    - symbol: XCAFDoc_MaterialTool
     - symbol: TDF_Label
     - symbol: TDataStd_Name
     - symbol: Quantity_ColorRGBA
@@ -277,6 +279,15 @@
     - symbol: ReplicadMeshExtractor
     - symbol: ReplicadEdgeMeshData
     - symbol: ReplicadEdgeMeshExtractor
+    - symbol: ReplicadRuntimeInfo
+    - symbol: ReplicadPrototypeMeshData
+    - symbol: ReplicadPrototypeEdgeMeshData
+    - symbol: ReplicadPrototypeIdData
+    - symbol: ReplicadPrototypeMeshExtractor
+    - symbol: ReplicadShapeIdentityInfo
+    - symbol: ReplicadShapeIdentity
+    - symbol: ReplicadBooleanBatchResult
+    - symbol: ReplicadBooleanBatch
 
   buildFlags:
     - -fwasm-exceptions
