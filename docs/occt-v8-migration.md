@@ -15,6 +15,8 @@ The former `replicad_with_exceptions` build is removed. Both remaining builds us
 
 The multi build remains available for consumers that provide the browser isolation and worker environment required by Emscripten pthreads. Replicad's normal API is identical between the single and multi entry points.
 
+The package exposes the generated modules directly to ESM consumers and provides small CommonJS compatibility shims for `require()`. Both entry points initialize the same generated ESM modules and WebAssembly artifacts.
+
 ## OCCT 8 binding changes
 
 OCCT 8 and the updated generated bindings consolidate numbered overload classes into their public class names. Replicad therefore calls overloads such as `gp_Pnt(...)` directly instead of selecting generated names such as `gp_Pnt_2`.
@@ -22,6 +24,12 @@ OCCT 8 and the updated generated bindings consolidate numbered overload classes 
 Reference-counted OCCT handles are also returned through their resolved wrapper type. Callers no longer invoke `.get()` merely to unwrap a generated handle. This changes the JavaScript binding surface, not OCCT's reference-counted ownership model.
 
 The migration includes the corresponding changes across geometry construction, curves, projections, import/export, XCAF assembly export, sketches, measurements, and shape operations.
+
+### Progress ranges
+
+The generated bindings now make the trailing `Message_ProgressRange` optional for `TransferRoots` and most `Build` and `Perform` methods. Omitting it materializes OCCT's default progress range internally, so this migration removes 15 manual progress-range allocations.
+
+Two writer APIs still require an explicit range: `STEPControl_Writer.Transfer(..., theProgress)` and `STEPCAFControl_Writer.Perform(..., theProgress)`. Replicad retains progress-range allocations at exactly those two callsites.
 
 ## Native rendering extractors
 
@@ -58,7 +66,7 @@ This migration is built from the immutable OCCT 8.0.1 canary inputs:
 
 Adopting a later stable OpenCascade.js/libcascade 3.0.0 image is a separate follow-up. It is not part of this migration branch.
 
-The generated package contains only the runtime artifacts listed in `package.json`: JavaScript glue, WebAssembly, declarations, and symbol maps for both variants. Build manifests and provenance JSON remain local ignored diagnostics and are not versioned or packed.
+The generated package contains only the runtime artifacts listed in `package.json`: JavaScript glue, WebAssembly, and declarations for both variants. Build manifests, provenance JSON, and linker symbol maps remain local diagnostics and are not versioned or packed.
 
 ## Verification
 

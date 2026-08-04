@@ -244,6 +244,7 @@ mainBuild:
   - symbol: BRepToolsWrapper
   - symbol: GeomToolsWrapper
   - symbol: OCJS_ShapeHasher
+  - symbol: ReplicadShapeCaster
   - symbol: ReplicadMeshData
   - symbol: ReplicadMeshExtractor
   - symbol: ReplicadEdgeMeshData
@@ -268,7 +269,6 @@ mainBuild:
   - -sEXPORTED_RUNTIME_METHODS=["FS","wasmMemory"]
   - -sENVIRONMENT=web,worker,node
   - --no-entry
-  - --emit-symbol-map
   - -sERROR_ON_UNDEFINED_SYMBOLS=0
   - -sSTACK_SIZE=8388608
   - -sWASM_BIGINT
@@ -280,6 +280,7 @@ mainBuild:
   - -sSHARED_MEMORY=1
 additionalCppFiles:
 - wrappers/shape-hasher.cpp
+- wrappers/shape-caster.cpp
 - wrappers/mesh-extractor.cpp
 - wrappers/edge-mesh-extractor.cpp
 - wrappers/brep-io.cpp

@@ -1,8 +1,4 @@
-import {
-  Geom_CylindricalSurface,
-  gp_GTrsf2d,
-  Geom_Surface,
-} from "replicad-opencascadejs";
+import { gp_GTrsf2d, Geom_Surface } from "replicad-opencascadejs";
 
 import { GCWithScope, localGC, WrappingObj } from "./register";
 import type { Deletable } from "./register";
@@ -164,13 +160,12 @@ export const scaleTransform2d = (
 };
 
 export function faceRadius(face: Face): null | number {
-  const oc = getOC();
-  const [r, gc] = localGC();
-  const geomSurf = r(oc.BRep_Tool.Surface(face.wrapped));
-
   if (face.geomType !== "CYLINDRE") return null;
 
-  const cylinder = r((geomSurf as Geom_CylindricalSurface).Cylinder());
+  const oc = getOC();
+  const [r, gc] = localGC();
+  const surface = r(new oc.BRepAdaptor_Surface(face.wrapped));
+  const cylinder = r(surface.Cylinder());
   const radius = cylinder.Radius();
   gc();
   return radius;
@@ -200,7 +195,8 @@ export function curvesAsEdgesOnFace(
         "Only planar and cylidrical faces can be unwrapped for sketching"
       );
 
-    const cylinder = r((geomSurf as Geom_CylindricalSurface).Cylinder());
+    const surface = r(new oc.BRepAdaptor_Surface(face.wrapped));
+    const cylinder = r(surface.Cylinder());
     if (!cylinder.Direct()) {
       geomSurf = geomSurf.UReversed();
     }
@@ -258,10 +254,7 @@ export function edgeToCurve(e: Edge, face: Face): Curve2D {
   return new Curve2D(trimmed);
 }
 
-const poles3dTo2d = (
-  poles: any,
-  register: <T extends Deletable>(value: T) => T
-) => {
+const poles3dTo2d = (poles: any, register: <T extends Deletable>(value: T) => T) => {
   const oc = getOC();
   const poles2d = register(
     new oc.NCollection_Array1_gp_Pnt2d(poles.Lower(), poles.Upper())
@@ -282,10 +275,7 @@ const direction3dTo2d = (direction: any): Point2D => [
   direction.Y(),
 ];
 
-const axis3dTo2d = (
-  axis: any,
-  register: <T extends Deletable>(value: T) => T
-) => {
+const axis3dTo2d = (axis: any, register: <T extends Deletable>(value: T) => T) => {
   const oc = getOC();
 
   const location = register(axis.Location());
@@ -377,7 +367,10 @@ export function edgeToCurveOnPlane(e: Edge): Curve2D {
       : new oc.Geom2d_BezierCurve(poles);
     curveCopy.Segment(firstParameter, lastParameter);
 
-    return orientCurveLikeEdge(new Curve2D(curveCopy), e);
+    return orientCurveLikeEdge(
+      new Curve2D(curveCopy),
+      e
+    );
   }
 
   if (curveType === "BSPLINE_CURVE") {
@@ -401,7 +394,10 @@ export function edgeToCurveOnPlane(e: Edge): Curve2D {
         );
     curveCopy.Segment(firstParameter, lastParameter, 1e-9);
 
-    return orientCurveLikeEdge(new Curve2D(curveCopy), e);
+    return orientCurveLikeEdge(
+      new Curve2D(curveCopy),
+      e
+    );
   }
 
   throw new Error(`Unsupported projected curve type: ${curveType}`);

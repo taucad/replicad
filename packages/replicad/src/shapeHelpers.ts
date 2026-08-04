@@ -19,12 +19,13 @@ import {
   GeomAPI_PointsToBSpline,
   gp_GTrsf,
   gp_Pnt,
-  NCollection_Array2_gp_Pnt,
 } from "replicad-opencascadejs";
 
 export const makeLine = (v1: Point, v2: Point): Edge => {
   const oc = getOC();
-  return new Edge(new oc.BRepBuilderAPI_MakeEdge(asPnt(v1), asPnt(v2)).Edge());
+  return new Edge(
+    new oc.BRepBuilderAPI_MakeEdge(asPnt(v1), asPnt(v2)).Edge()
+  );
 };
 
 export const makeCircle = (
@@ -105,7 +106,10 @@ export const makeHelix = (
   );
 
   const e = r(
-    new oc.BRepBuilderAPI_MakeEdge(r(geomSeg.Value()), r(geomSurf))
+    new oc.BRepBuilderAPI_MakeEdge(
+      r(geomSeg.Value()),
+      r(geomSurf)
+    )
   ).Edge();
 
   // 4. Convert to wire and fix building 3d geom from 2d geom
@@ -328,9 +332,15 @@ export const makeNonPlanarFace = (wire: Wire): Face => {
   const oc = getOC();
   const [r, gc] = localGC();
 
-  const faceBuilder = r(new oc.BRepOffsetAPI_MakeFilling());
+  const faceBuilder = r(
+    new oc.BRepOffsetAPI_MakeFilling()
+  );
   wire.edges.forEach((edge) => {
-    faceBuilder.Add(r(edge).wrapped, oc.GeomAbs_Shape.GeomAbs_C0, true);
+    faceBuilder.Add(
+      r(edge).wrapped,
+      oc.GeomAbs_Shape.GeomAbs_C0,
+      true
+    );
   });
 
   faceBuilder.Build();
@@ -366,7 +376,7 @@ export const makeCylinder = (
 };
 
 /**
- * Creates a sphere with the given radius, centred on the origin.
+ * Creates a sphere with the given radius.
  *
  * @category Solids
  */
@@ -411,26 +421,8 @@ class EllpsoidTransform extends WrappingObj<gp_GTrsf> {
   }
 }
 
-function convertToJSArray(
-  arrayOfPoints: NCollection_Array2_gp_Pnt
-): gp_Pnt[][] {
-  const newArray = [];
-
-  for (let r = arrayOfPoints.LowerRow(); r <= arrayOfPoints.UpperRow(); r++) {
-    const row: gp_Pnt[] = [];
-    newArray.push(row);
-    for (let c = arrayOfPoints.LowerCol(); c <= arrayOfPoints.UpperCol(); c++) {
-      // @ts-expect-error Value binding missing from NCollection_Array2 d.ts
-      const pnt: gp_Pnt = arrayOfPoints.Value(r, c);
-      row.push(pnt);
-    }
-  }
-
-  return newArray;
-}
-
 /**
- * Creates an ellipsoid with the given lengths of the axes, centred on the origin.
+ * Creates an ellipsoid with the given lengths of the axes.
  *
  * @category Solids
  */
@@ -451,15 +443,14 @@ export const makeEllipsoid = (
     sphericalSurface.UReversed()
   );
 
-  const poles = convertToJSArray(baseSurface.Poles());
   const transform = new EllpsoidTransform(aLength, bLength, cLength);
 
-  poles.forEach((columns, r) => {
-    columns.forEach((value, c) => {
-      const newPoint = transform.applyToPoint(value);
-      baseSurface.SetPole(r + 1, c + 1, newPoint);
-    });
-  });
+  for (let u = 1; u <= baseSurface.NbUPoles(); u++) {
+    for (let v = 1; v <= baseSurface.NbVPoles(); v++) {
+      const newPoint = transform.applyToPoint(baseSurface.Pole(u, v));
+      baseSurface.SetPole(u, v, newPoint);
+    }
+  }
   const shell = cast(
     r(new oc.BRepBuilderAPI_MakeShell(baseSurface.UReversed(), false)).Shell()
   ) as Shell;

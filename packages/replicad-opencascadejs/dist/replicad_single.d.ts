@@ -33116,6 +33116,14 @@ export declare class ReplicadRuntimeInfo {
   [Symbol.dispose](): void;
 }
 
+export declare class ReplicadShapeCaster {
+  constructor();
+  static CompSolid(shape: TopoDS_Shape): TopoDS_CompSolid;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
 export declare class ReplicadShapeIdentity {
   constructor();
   static Inspect(shape: TopoDS_Shape): ReplicadShapeIdentityInfo;
@@ -34253,6 +34261,7 @@ export type OpenCascadeInstance = {
   ReplicadPrototypeMeshData: typeof ReplicadPrototypeMeshData;
   ReplicadPrototypeMeshExtractor: typeof ReplicadPrototypeMeshExtractor;
   ReplicadRuntimeInfo: typeof ReplicadRuntimeInfo;
+  ReplicadShapeCaster: typeof ReplicadShapeCaster;
   ReplicadShapeIdentity: typeof ReplicadShapeIdentity;
   ReplicadShapeIdentityInfo: typeof ReplicadShapeIdentityInfo;
   TColStd_IndexedDataMapOfStringString: typeof TColStd_IndexedDataMapOfStringString;

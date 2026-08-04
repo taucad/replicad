@@ -1,7 +1,4 @@
-import {
-  Geom2dAPI_PointsToBSpline,
-  Geom2d_TrimmedCurve,
-} from "replicad-opencascadejs";
+import { Geom2dAPI_PointsToBSpline } from "replicad-opencascadejs";
 import { getOC } from "../oclib.js";
 import { GCWithScope, localGC } from "../register.js";
 
@@ -74,18 +71,18 @@ export const make2dThreePointArc = (
       r(pnt(endPoint))
     )
   ).Value();
-  gc();
 
-  const curve = new Curve2D(segment);
-  if (!samePoint(curve.firstPoint, startPoint)) {
-    (curve.wrapped as Geom2d_TrimmedCurve).SetTrim(
-      curve.lastParameter,
-      curve.firstParameter,
+  const firstPoint = r(segment.Value(segment.FirstParameter()));
+  if (!samePoint([firstPoint.X(), firstPoint.Y()], startPoint)) {
+    segment.SetTrim(
+      segment.LastParameter(),
+      segment.FirstParameter(),
       true,
       true
     );
   }
-  return curve;
+  gc();
+  return new Curve2D(segment);
 };
 
 /**
@@ -114,18 +111,18 @@ export const make2dTangentArc = (
       r(pnt(endPoint))
     )
   ).Value();
-  gc();
 
-  const curve = new Curve2D(segment);
-  if (!samePoint(curve.firstPoint, startPoint)) {
-    (curve.wrapped as Geom2d_TrimmedCurve).SetTrim(
-      curve.lastParameter,
-      curve.firstParameter,
+  const firstPoint = r(segment.Value(segment.FirstParameter()));
+  if (!samePoint([firstPoint.X(), firstPoint.Y()], startPoint)) {
+    segment.SetTrim(
+      segment.LastParameter(),
+      segment.FirstParameter(),
       true,
       true
     );
   }
-  return curve;
+  gc();
+  return new Curve2D(segment);
 };
 
 /**
@@ -176,7 +173,12 @@ export const make2dEllipse = (
   const oc = getOC();
   const [r, gc] = localGC();
   const ellipse = r(
-    new oc.gp_Elips2d(r(axis2d(center, xDir)), majorRadius, minorRadius, direct)
+    new oc.gp_Elips2d(
+      r(axis2d(center, xDir)),
+      majorRadius,
+      minorRadius,
+      direct
+    )
   );
 
   const segment = r(new oc.GC_MakeEllipse2d(ellipse)).Value();

@@ -133,7 +133,12 @@ export function exportSTEP(
   }
 
   const session = r(new oc.XSControl_WorkSession());
-  const writer = r(new oc.STEPCAFControl_Writer(session, false));
+  const writer = r(
+    new oc.STEPCAFControl_Writer(
+      session,
+      false
+    )
+  );
   writer.SetColorMode(true);
   writer.SetLayerMode(true);
   writer.SetNameMode(true);
@@ -150,6 +155,7 @@ export function exportSTEP(
   if (success) {
     const file = oc.FS.readFile("/" + filename);
     oc.FS.unlink("/" + filename);
+    // Emscripten's Uint8Array is ArrayBuffer-backed despite TypeScript's broader type.
     const blob = new Blob([file as BlobPart], { type: "application/STEP" });
     return blob;
   } else {

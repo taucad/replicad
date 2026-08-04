@@ -18,7 +18,7 @@
     "react-dom": "18.2.0",
     "replicad": "workspace:@taulabs/replicad@^",
     "replicad-opencascadejs": "workspace:@taulabs/replicad-opencascadejs@^",
-    "replicad-threejs-helper": "workspace:^",
+    "replicad-threejs-helper": "^0.23.0",
     "three": "^0.155.0"
   },
   "devDependencies": {

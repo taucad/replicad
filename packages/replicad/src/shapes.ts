@@ -279,7 +279,11 @@ export const iterTopo = function* iterTopo(
   topo: TopoEntity
 ): IterableIterator<TopoDS_Shape> {
   const oc = getOC();
-  const explorer = new oc.TopExp_Explorer(shape, asTopo(topo), asTopo("shape"));
+  const explorer = new oc.TopExp_Explorer(
+    shape,
+    asTopo(topo),
+    asTopo("shape")
+  );
   const seen: TopoDS_Shape[] = [];
   while (explorer.More()) {
     const item = explorer.Current();
@@ -511,8 +515,7 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
   }
 
   protected _mesh({ tolerance = 1e-3, angularTolerance = 0.1 } = {}): void {
-    // Clean mesh to allow for coarser tolerance meshing to supercede the mesh living in WASM memory.
-    // Without this, coarser tolerance meshing can return a mesh with finer tolerances due to OCCT caching of meshes.
+    // ReplicadMeshExtractor.mesh clears cached triangulations before rebuilding so the requested tolerance is honored even after a finer prior mesh.
     this.oc.ReplicadMeshExtractor.mesh(
       this.wrapped,
       tolerance,
@@ -645,7 +648,8 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
 
     writer.Transfer(
       this.wrapped,
-      this.oc.STEPControl_StepModelType.STEPControl_AsIs,
+      this.oc.STEPControl_StepModelType
+        .STEPControl_AsIs,
       true,
       progress
     );
@@ -1567,17 +1571,21 @@ export function downcast(shape: TopoDS_Shape): GenericTopo {
   const oc = getOC();
   const ta = oc.TopAbs_ShapeEnum;
 
-  const CAST_MAP = new Map<string, (s: TopoDS_Shape) => TopoDS_Shape>([
+  const CAST_MAP = new Map<
+    TopAbs_ShapeEnum,
+    (s: TopoDS_Shape) => TopoDS_Shape
+  >([
     [ta.TopAbs_VERTEX, oc.TopoDS.Vertex],
     [ta.TopAbs_EDGE, oc.TopoDS.Edge],
     [ta.TopAbs_WIRE, oc.TopoDS.Wire],
     [ta.TopAbs_FACE, oc.TopoDS.Face],
     [ta.TopAbs_SHELL, oc.TopoDS.Shell],
     [ta.TopAbs_SOLID, oc.TopoDS.Solid],
+    [ta.TopAbs_COMPSOLID, oc.ReplicadShapeCaster.CompSolid],
     [ta.TopAbs_COMPOUND, oc.TopoDS.Compound],
   ]);
 
-  const myType = shapeType(shape) as string;
+  const myType = shapeType(shape);
   const caster = CAST_MAP.get(myType);
   if (!caster) throw new Error("Could not find a wrapper for this shape type");
   return caster(shape);
@@ -1588,7 +1596,7 @@ export function cast(shape: TopoDS_Shape): AnyShape {
   const ta = oc.TopAbs_ShapeEnum;
 
   const CAST_MAP = new Map<
-    string,
+    TopAbs_ShapeEnum,
     | typeof Vertex
     | typeof Edge
     | typeof Wire
@@ -1608,7 +1616,7 @@ export function cast(shape: TopoDS_Shape): AnyShape {
     [ta.TopAbs_COMPOUND, Compound],
   ]);
 
-  const Klass = CAST_MAP.get(shapeType(shape) as string);
+  const Klass = CAST_MAP.get(shapeType(shape));
 
   if (!Klass) throw new Error(`Could not find a wrapper for this shape type`);
   return new Klass(downcast(shape));
