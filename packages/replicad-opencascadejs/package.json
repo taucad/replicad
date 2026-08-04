@@ -1,9 +1,17 @@
 {
-  "name": "replicad-opencascadejs",
-  "version": "0.23.0",
-  "description": "OpencascadeJS custom build for replicad",
+  "name": "@taulabs/replicad-opencascadejs",
+  "version": "0.23.0-beta.0",
+  "description": "OpencascadeJS custom build for replicad (Tau fork: SIMD without relaxed-simd, native WebAssembly exceptions)",
   "author": "Steve Genoud <steve@sgenoud.com>",
   "homepage": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/taucad/replicad.git",
+    "directory": "packages/replicad-opencascadejs"
+  },
+  "bugs": {
+    "url": "https://github.com/taucad/replicad/issues"
+  },
   "license": "MIT",
   "type": "module",
   "exports": {
