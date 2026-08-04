@@ -15,9 +15,10 @@
 #include <OSD_ThreadPool.hxx>
 #include <Precision.hxx>
 #include <cstdlib>
+#include <vector>
 
-class ReplicadMeshData;
-inline ReplicadMeshData ReplicadExtractFaceMesh(
+template <typename Result>
+inline Result ReplicadExtractFaceMesh(
   const TopoDS_Shape& shape,
   bool skipNormals);
 
@@ -69,6 +70,8 @@ public:
   int getFaceGroupsSize() const { return faceGroupsSize_; }
 
 private:
+  using Coordinate = float;
+
   float* verticesPtr_;
   float* normalsPtr_;
   uint32_t* trianglesPtr_;
@@ -78,15 +81,16 @@ private:
   int trianglesSize_;
   int faceGroupsSize_;
 
-  friend ReplicadMeshData ReplicadExtractFaceMesh(
-    const TopoDS_Shape&,
-    bool);
+  template <typename Result>
+  friend Result ReplicadExtractFaceMesh(const TopoDS_Shape&, bool);
 };
 
-inline ReplicadMeshData ReplicadExtractFaceMesh(
+template <typename Result>
+inline Result ReplicadExtractFaceMesh(
   const TopoDS_Shape& shape,
   bool skipNormals
 ) {
+  using Coordinate = typename Result::Coordinate;
   int totalNodes = 0;
   int totalTriangles = 0;
   int totalFaces = 0;
@@ -101,16 +105,16 @@ inline ReplicadMeshData ReplicadExtractFaceMesh(
     totalFaces++;
   }
 
-  ReplicadMeshData result;
+  Result result;
   result.verticesSize_ = totalNodes * 3;
-  result.verticesPtr_ = static_cast<float*>(
-    std::malloc(result.verticesSize_ * sizeof(float)));
+  result.verticesPtr_ = static_cast<Coordinate*>(
+    std::malloc(result.verticesSize_ * sizeof(Coordinate)));
   if (!result.verticesPtr_ && result.verticesSize_ > 0) throw std::bad_alloc();
 
   if (!skipNormals) {
     result.normalsSize_ = totalNodes * 3;
-    result.normalsPtr_ = static_cast<float*>(
-      std::malloc(result.normalsSize_ * sizeof(float)));
+    result.normalsPtr_ = static_cast<Coordinate*>(
+      std::malloc(result.normalsSize_ * sizeof(Coordinate)));
     if (!result.normalsPtr_ && result.normalsSize_ > 0) throw std::bad_alloc();
   }
 
@@ -141,9 +145,9 @@ inline ReplicadMeshData ReplicadExtractFaceMesh(
     for (int index = 1; index <= nodeCount; index++) {
       const gp_Pnt point = triangulation->Node(index).Transformed(transformation);
       const int base = (vertexOffset + index - 1) * 3;
-      result.verticesPtr_[base] = static_cast<float>(point.X());
-      result.verticesPtr_[base + 1] = static_cast<float>(point.Y());
-      result.verticesPtr_[base + 2] = static_cast<float>(point.Z());
+      result.verticesPtr_[base] = static_cast<Coordinate>(point.X());
+      result.verticesPtr_[base + 1] = static_cast<Coordinate>(point.Y());
+      result.verticesPtr_[base + 2] = static_cast<Coordinate>(point.Z());
     }
 
     const bool isReversed = face.Orientation() == TopAbs_REVERSED;
@@ -168,16 +172,16 @@ inline ReplicadMeshData ReplicadExtractFaceMesh(
           if (isReversed) normal.Reverse();
 
           const int base = (vertexOffset + index - 1) * 3;
-          result.normalsPtr_[base] = static_cast<float>(normal.X());
-          result.normalsPtr_[base + 1] = static_cast<float>(normal.Y());
-          result.normalsPtr_[base + 2] = static_cast<float>(normal.Z());
+          result.normalsPtr_[base] = static_cast<Coordinate>(normal.X());
+          result.normalsPtr_[base + 1] = static_cast<Coordinate>(normal.Y());
+          result.normalsPtr_[base + 2] = static_cast<Coordinate>(normal.Z());
         }
       } else {
         for (int index = 1; index <= nodeCount; index++) {
           const int base = (vertexOffset + index - 1) * 3;
-          result.normalsPtr_[base] = 0.0f;
-          result.normalsPtr_[base + 1] = 0.0f;
-          result.normalsPtr_[base + 2] = 1.0f;
+          result.normalsPtr_[base] = static_cast<Coordinate>(0.0);
+          result.normalsPtr_[base + 1] = static_cast<Coordinate>(0.0);
+          result.normalsPtr_[base + 2] = static_cast<Coordinate>(1.0);
         }
       }
     }
@@ -209,6 +213,17 @@ inline ReplicadMeshData ReplicadExtractFaceMesh(
   return result;
 }
 
+inline std::vector<int32_t> ReplicadCollectFaceIds(const TopoDS_Shape& shape) {
+  std::vector<int32_t> ids;
+  for (TopExp_Explorer explorer(shape, TopAbs_FACE); explorer.More(); explorer.Next()) {
+    const TopoDS_Face& face = TopoDS::Face(explorer.Current());
+    TopLoc_Location location;
+    if (BRep_Tool::Triangulation(face, location).IsNull()) continue;
+    ids.push_back(ReplicadShapeHashCode(face, ReplicadShapeHashUpperBound));
+  }
+  return ids;
+}
+
 class ReplicadMeshExtractor {
 public:
   static void mesh(
@@ -234,6 +249,6 @@ public:
     bool skipNormals
   ) {
     mesh(shape, tolerance, angularTolerance);
-    return ReplicadExtractFaceMesh(shape, skipNormals);
+    return ReplicadExtractFaceMesh<ReplicadMeshData>(shape, skipNormals);
   }
 };

@@ -252,6 +252,12 @@ mainBuild:
   - symbol: ReplicadEdgeMeshData
   - symbol: ReplicadEdgeMeshExtractor
   - symbol: ReplicadRuntimeInfo
+  - symbol: ReplicadPrototypeMeshData
+  - symbol: ReplicadPrototypeEdgeMeshData
+  - symbol: ReplicadPrototypeIdData
+  - symbol: ReplicadPrototypeMeshExtractor
+  - symbol: ReplicadShapeIdentityInfo
+  - symbol: ReplicadShapeIdentity
   - symbol: ReplicadBooleanBatchResult
   - symbol: ReplicadBooleanBatch
   emccFlags:
@@ -281,6 +287,8 @@ additionalCppFiles:
 - wrappers/mesh-extractor.cpp
 - wrappers/edge-mesh-extractor.cpp
 - wrappers/runtime-info.cpp
+- wrappers/prototype-mesh-extractor.cpp
+- wrappers/shape-identity.cpp
 - wrappers/boolean-batch.cpp
 - wrappers/brep-io.cpp
 - wrappers/geom2d-io.cpp

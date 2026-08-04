@@ -14,9 +14,10 @@
 #include <NCollection_Array1.hxx>
 #include <NCollection_Map.hxx>
 #include <cstdlib>
+#include <vector>
 
-class ReplicadEdgeMeshData;
-inline ReplicadEdgeMeshData ReplicadExtractEdgeMesh(
+template <typename Result>
+inline Result ReplicadExtractEdgeMesh(
   const TopoDS_Shape& shape,
   double tolerance,
   double angularTolerance);
@@ -46,15 +47,15 @@ public:
   int getEdgeGroupsSize() const { return edgeGroupsSize_; }
 
 private:
+  using Coordinate = float;
+
   float* linesPtr_;
   int32_t* edgeGroupsPtr_;
   int linesSize_;
   int edgeGroupsSize_;
 
-  friend ReplicadEdgeMeshData ReplicadExtractEdgeMesh(
-    const TopoDS_Shape&,
-    double,
-    double);
+  template <typename Result>
+  friend Result ReplicadExtractEdgeMesh(const TopoDS_Shape&, double, double);
 };
 
 inline void ReplicadEnsureEdgeMesh(
@@ -73,7 +74,7 @@ inline void ReplicadEnsureEdgeMesh(
 }
 
 template <typename Visitor>
-void ReplicadVisitRenderableEdges(
+inline void ReplicadVisitRenderableEdges(
   const TopoDS_Shape& shape,
   double tolerance,
   double angularTolerance,
@@ -128,11 +129,14 @@ void ReplicadVisitRenderableEdges(
   }
 }
 
-inline ReplicadEdgeMeshData ReplicadExtractEdgeMesh(
+template <typename Result>
+inline Result ReplicadExtractEdgeMesh(
   const TopoDS_Shape& shape,
   double tolerance,
   double angularTolerance
 ) {
+  using Coordinate = typename Result::Coordinate;
+
   ReplicadEnsureEdgeMesh(shape, tolerance, angularTolerance);
   int totalSegments = 0;
   int totalEdges = 0;
@@ -149,11 +153,11 @@ inline ReplicadEdgeMeshData ReplicadExtractEdgeMesh(
       totalEdges++;
     });
 
-  ReplicadEdgeMeshData result;
+  Result result;
   result.linesSize_ = totalSegments * 6;
   if (result.linesSize_ > 0) {
-    result.linesPtr_ = static_cast<float*>(
-      std::malloc(result.linesSize_ * sizeof(float)));
+    result.linesPtr_ = static_cast<Coordinate*>(
+      std::malloc(result.linesSize_ * sizeof(Coordinate)));
     if (!result.linesPtr_) throw std::bad_alloc();
   }
 
@@ -187,12 +191,12 @@ inline ReplicadEdgeMeshData ReplicadExtractEdgeMesh(
           const gp_Pnt point = triangulation->Node(nodes.Value(index))
             .Transformed(transformation);
           if (hasPrevious) {
-            result.linesPtr_[lineOffset++] = static_cast<float>(previous.X());
-            result.linesPtr_[lineOffset++] = static_cast<float>(previous.Y());
-            result.linesPtr_[lineOffset++] = static_cast<float>(previous.Z());
-            result.linesPtr_[lineOffset++] = static_cast<float>(point.X());
-            result.linesPtr_[lineOffset++] = static_cast<float>(point.Y());
-            result.linesPtr_[lineOffset++] = static_cast<float>(point.Z());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(previous.X());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(previous.Y());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(previous.Z());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(point.X());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(point.Y());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(point.Z());
           }
           previous = point;
           hasPrevious = true;
@@ -209,12 +213,12 @@ inline ReplicadEdgeMeshData ReplicadExtractEdgeMesh(
         for (int index = 1; index <= deflection.NbPoints(); index++) {
           const gp_Pnt point = deflection.Value(index);
           if (hasPrevious) {
-            result.linesPtr_[lineOffset++] = static_cast<float>(previous.X());
-            result.linesPtr_[lineOffset++] = static_cast<float>(previous.Y());
-            result.linesPtr_[lineOffset++] = static_cast<float>(previous.Z());
-            result.linesPtr_[lineOffset++] = static_cast<float>(point.X());
-            result.linesPtr_[lineOffset++] = static_cast<float>(point.Y());
-            result.linesPtr_[lineOffset++] = static_cast<float>(point.Z());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(previous.X());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(previous.Y());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(previous.Z());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(point.X());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(point.Y());
+            result.linesPtr_[lineOffset++] = static_cast<Coordinate>(point.Z());
           }
           previous = point;
           hasPrevious = true;
@@ -230,6 +234,27 @@ inline ReplicadEdgeMeshData ReplicadExtractEdgeMesh(
   return result;
 }
 
+inline std::vector<int32_t> ReplicadCollectEdgeIds(
+  const TopoDS_Shape& shape,
+  double tolerance,
+  double angularTolerance
+) {
+  ReplicadEnsureEdgeMesh(shape, tolerance, angularTolerance);
+  std::vector<int32_t> ids;
+  ReplicadVisitRenderableEdges(
+    shape,
+    tolerance,
+    angularTolerance,
+    [&](const TopoDS_Edge& edge,
+        const Handle(Poly_Triangulation)&,
+        const Handle(Poly_PolygonOnTriangulation)&,
+        const TopLoc_Location&,
+        int) {
+      ids.push_back(ReplicadShapeHashCode(edge, ReplicadShapeHashUpperBound));
+    });
+  return ids;
+}
+
 class ReplicadEdgeMeshExtractor {
 public:
   static ReplicadEdgeMeshData extract(
@@ -237,7 +262,7 @@ public:
     double tolerance,
     double angularTolerance
   ) {
-    return ReplicadExtractEdgeMesh(
+    return ReplicadExtractEdgeMesh<ReplicadEdgeMeshData>(
       shape,
       tolerance,
       angularTolerance);

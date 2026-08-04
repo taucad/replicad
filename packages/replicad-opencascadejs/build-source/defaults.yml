@@ -282,6 +282,12 @@ bindings:
   - symbol: ReplicadEdgeMeshData
   - symbol: ReplicadEdgeMeshExtractor
   - symbol: ReplicadRuntimeInfo
+  - symbol: ReplicadPrototypeMeshData
+  - symbol: ReplicadPrototypeEdgeMeshData
+  - symbol: ReplicadPrototypeIdData
+  - symbol: ReplicadPrototypeMeshExtractor
+  - symbol: ReplicadShapeIdentityInfo
+  - symbol: ReplicadShapeIdentity
   - symbol: ReplicadBooleanBatchResult
   - symbol: ReplicadBooleanBatch
 
