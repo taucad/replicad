@@ -33488,6 +33488,30 @@ export declare class OCJS_ShapeHasher {
   [Symbol.dispose](): void;
 }
 
+export declare class ReplicadBooleanBatch {
+  constructor();
+  static Fuse(shapes: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number): ReplicadBooleanBatchResult;
+  static Cut(arguments: TopTools_ListOfShape, tools: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number): ReplicadBooleanBatchResult;
+  static Common(shapes: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number): ReplicadBooleanBatchResult;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadBooleanBatchResult {
+  constructor();
+  constructor(shape: TopoDS_Shape, isDone: boolean, hasErrors: boolean, hasWarnings: boolean, errors: string, warnings: string);
+  Shape(): TopoDS_Shape;
+  IsDone(): boolean;
+  HasErrors(): boolean;
+  HasWarnings(): boolean;
+  Errors(): string;
+  Warnings(): string;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
 export declare class ReplicadEdgeMeshData {
   constructor();
   constructor(other: ReplicadEdgeMeshData);
@@ -33528,6 +33552,90 @@ export declare class ReplicadMeshExtractor {
   constructor();
   static mesh(shape: TopoDS_Shape, tolerance: number, angularTolerance: number): void;
   static extract(shape: TopoDS_Shape, tolerance: number, angularTolerance: number, skipNormals: boolean): ReplicadMeshData;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadPrototypeEdgeMeshData {
+  constructor();
+  constructor(other: ReplicadPrototypeEdgeMeshData);
+  getLinesPtr(): number;
+  getLinesSize(): number;
+  getEdgeGroupsPtr(): number;
+  getEdgeGroupsSize(): number;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadPrototypeIdData {
+  constructor();
+  constructor(other: ReplicadPrototypeIdData);
+  getIdsPtr(): number;
+  getIdsSize(): number;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadPrototypeMeshData {
+  constructor();
+  constructor(other: ReplicadPrototypeMeshData);
+  getVerticesPtr(): number;
+  getNormalsPtr(): number;
+  getTrianglesPtr(): number;
+  getFaceGroupsPtr(): number;
+  getVerticesSize(): number;
+  getNormalsSize(): number;
+  getTrianglesSize(): number;
+  getFaceGroupsSize(): number;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadPrototypeMeshExtractor {
+  constructor();
+  static ExtractFaces(shape: TopoDS_Shape, tolerance: number, angularTolerance: number, skipNormals: boolean): ReplicadPrototypeMeshData;
+  static ExtractEdges(shape: TopoDS_Shape, tolerance: number, angularTolerance: number): ReplicadPrototypeEdgeMeshData;
+  static ExtractFaceIds(shape: TopoDS_Shape): ReplicadPrototypeIdData;
+  static ExtractEdgeIds(shape: TopoDS_Shape, tolerance: number, angularTolerance: number): ReplicadPrototypeIdData;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadRuntimeInfo {
+  constructor();
+  static IsMultiThreaded(): boolean;
+  static ThreadCount(): number;
+  static ConfigureThreadPool(): number;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadShapeIdentity {
+  constructor();
+  static Inspect(shape: TopoDS_Shape): ReplicadShapeIdentityInfo;
+  static IsPartner(left: TopoDS_Shape, right: TopoDS_Shape): boolean;
+  static PrototypeHash(shape: TopoDS_Shape): string;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+export declare class ReplicadShapeIdentityInfo {
+  constructor();
+  constructor(prototypeHash: string, partnerKey: string, orientation: string, determinant: number, canPrototypeMesh: boolean, matrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]);
+  PrototypeHash(): string;
+  PartnerKey(): string;
+  Orientation(): string;
+  Determinant(): number;
+  CanPrototypeMesh(): boolean;
+  MatrixSize(): number;
+  MatrixValue(index: number): number;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
@@ -34677,10 +34785,19 @@ export type OpenCascadeInstance = {
   BRepToolsWrapper: typeof BRepToolsWrapper;
   GeomToolsWrapper: typeof GeomToolsWrapper;
   OCJS_ShapeHasher: typeof OCJS_ShapeHasher;
+  ReplicadBooleanBatch: typeof ReplicadBooleanBatch;
+  ReplicadBooleanBatchResult: typeof ReplicadBooleanBatchResult;
   ReplicadEdgeMeshData: typeof ReplicadEdgeMeshData;
   ReplicadEdgeMeshExtractor: typeof ReplicadEdgeMeshExtractor;
   ReplicadMeshData: typeof ReplicadMeshData;
   ReplicadMeshExtractor: typeof ReplicadMeshExtractor;
+  ReplicadPrototypeEdgeMeshData: typeof ReplicadPrototypeEdgeMeshData;
+  ReplicadPrototypeIdData: typeof ReplicadPrototypeIdData;
+  ReplicadPrototypeMeshData: typeof ReplicadPrototypeMeshData;
+  ReplicadPrototypeMeshExtractor: typeof ReplicadPrototypeMeshExtractor;
+  ReplicadRuntimeInfo: typeof ReplicadRuntimeInfo;
+  ReplicadShapeIdentity: typeof ReplicadShapeIdentity;
+  ReplicadShapeIdentityInfo: typeof ReplicadShapeIdentityInfo;
   TColStd_IndexedDataMapOfStringString: typeof TColStd_IndexedDataMapOfStringString;
   TopoDS: typeof TopoDS;
   OCJS: typeof OCJS;
