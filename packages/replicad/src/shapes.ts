@@ -33,6 +33,97 @@ export type { CurveType };
 export type AnyShape = Vertex | Edge | Wire | Face | Shell | Solid | CompSolid | Compound;
 
 type TopoEntity = 'vertex' | 'edge' | 'wire' | 'face' | 'shell' | 'solid' | 'solidCompound' | 'compound' | 'shape';
+type BooleanOptimisation = 'none' | 'commonFace' | 'sameFace';
+
+export interface BooleanOperationOptions {
+  optimisation?: BooleanOptimisation;
+}
+
+type BooleanOperation = 'fuse' | 'cut' | 'common';
+
+interface BatchBooleanResult {
+  Shape(): TopoDS_Shape;
+  IsDone(): boolean;
+  HasErrors(): boolean;
+  Errors(): string;
+  delete(): void;
+}
+
+interface BatchBooleanApi {
+  Fuse(
+    shapes: ReturnType<typeof makeShapeList>,
+    nonDestructive: boolean,
+    glue: number,
+    simplify: boolean,
+    angularTolerance: number,
+    fuzzyValue: number
+  ): BatchBooleanResult;
+  Cut(
+    argumentsList: ReturnType<typeof makeShapeList>,
+    toolsList: ReturnType<typeof makeShapeList>,
+    nonDestructive: boolean,
+    glue: number,
+    simplify: boolean,
+    angularTolerance: number,
+    fuzzyValue: number
+  ): BatchBooleanResult;
+  Common(
+    shapes: ReturnType<typeof makeShapeList>,
+    nonDestructive: boolean,
+    glue: number,
+    simplify: boolean,
+    angularTolerance: number,
+    fuzzyValue: number
+  ): BatchBooleanResult;
+}
+
+const glueOption = (optimisation: BooleanOptimisation): number => {
+  if (optimisation === 'commonFace') return 1;
+  if (optimisation === 'sameFace') return 2;
+  return 0;
+};
+
+const makeShapeList = (oc: ReturnType<typeof getOC>, shapes: readonly TopoDS_Shape[]) => {
+  const list = new oc.NCollection_List_TopoDS_Shape();
+  for (const shape of shapes) list.Append(shape);
+  return list;
+};
+
+const runBooleanBatch = (
+  oc: ReturnType<typeof getOC>,
+  operation: BooleanOperation,
+  argumentShapes: readonly TopoDS_Shape[],
+  toolShapes: readonly TopoDS_Shape[],
+  { optimisation = 'none' }: BooleanOperationOptions = {}
+): TopoDS_Shape => {
+  const argumentsList = makeShapeList(oc, argumentShapes);
+  const toolsList = makeShapeList(oc, toolShapes);
+  const allShapesList = makeShapeList(oc, [...argumentShapes, ...toolShapes]);
+  const batch = (oc as typeof oc & { ReplicadBooleanBatch: BatchBooleanApi }).ReplicadBooleanBatch;
+
+  try {
+    const glue = glueOption(optimisation);
+    const result =
+      operation === 'fuse'
+        ? batch.Fuse(allShapesList, false, glue, true, 1e-3, 0)
+        : operation === 'cut'
+        ? batch.Cut(argumentsList, toolsList, false, glue, true, 1e-3, 0)
+        : batch.Common(allShapesList, false, glue, true, 1e-3, 0);
+
+    try {
+      if (!result.IsDone() || result.HasErrors()) {
+        throw new Error(result.Errors() || `Could not ${operation} shapes`);
+      }
+      return result.Shape();
+    } finally {
+      result.delete();
+    }
+  } finally {
+    allShapesList.delete();
+    toolsList.delete();
+    argumentsList.delete();
+  }
+};
 
 type GenericTopo =
   | TopoDS_Vertex
@@ -926,19 +1017,28 @@ export class _3DShape<Type extends TopoDS_Shape>
    *
    * @category Shape Modifications
    */
-  fuse(other: Shape3D, { optimisation = 'none' }: { optimisation?: 'none' | 'commonFace' | 'sameFace' } = {}): Shape3D {
-    const r = GCWithScope();
-    const newBody = r(new this.oc.BRepAlgoAPI_Fuse(this.wrapped, other.wrapped));
-    if (optimisation === 'commonFace') {
-      newBody.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueShift);
-    }
-    if (optimisation === 'sameFace') {
-      newBody.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueFull);
-    }
+  fuse(other: Shape3D, options: BooleanOperationOptions = {}): Shape3D {
+    return this.fuseAll([other], options);
+  }
 
-    newBody.Build();
-    newBody.SimplifyResult(true, true, 1e-3);
-    const newShape = cast(newBody.Shape());
+  /**
+   * Builds a new shape by fusing this shape with all provided shapes in one
+   * OCCT boolean operation.
+   *
+   * @category Shape Modifications
+   */
+  fuseAll(others: readonly Shape3D[], options: BooleanOperationOptions = {}): Shape3D {
+    if (others.length === 0) return this.clone().asShape3D();
+
+    const newShape = cast(
+      runBooleanBatch(
+        this.oc,
+        'fuse',
+        [this.wrapped],
+        others.map((shape) => shape.wrapped),
+        options
+      )
+    );
     if (!isShape3D(newShape)) throw new Error('Could not fuse as a 3d shape');
 
     return newShape;
@@ -949,19 +1049,28 @@ export class _3DShape<Type extends TopoDS_Shape>
    *
    * @category Shape Modifications
    */
-  cut(tool: Shape3D, { optimisation = 'none' }: { optimisation?: 'none' | 'commonFace' | 'sameFace' } = {}): Shape3D {
-    const r = GCWithScope();
-    const cutter = r(new this.oc.BRepAlgoAPI_Cut(this.wrapped, tool.wrapped));
-    if (optimisation === 'commonFace') {
-      cutter.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueShift);
-    }
-    if (optimisation === 'sameFace') {
-      cutter.SetGlue(this.oc.BOPAlgo_GlueEnum.BOPAlgo_GlueFull);
-    }
-    cutter.Build();
-    cutter.SimplifyResult(true, true, 1e-3);
+  cut(tool: Shape3D, options: BooleanOperationOptions = {}): Shape3D {
+    return this.cutAll([tool], options);
+  }
 
-    const newShape = cast(cutter.Shape());
+  /**
+   * Builds a new shape by removing all provided tool shapes in one OCCT
+   * boolean operation.
+   *
+   * @category Shape Modifications
+   */
+  cutAll(tools: readonly Shape3D[], options: BooleanOperationOptions = {}): Shape3D {
+    if (tools.length === 0) return this.clone().asShape3D();
+
+    const newShape = cast(
+      runBooleanBatch(
+        this.oc,
+        'cut',
+        [this.wrapped],
+        tools.map((shape) => shape.wrapped),
+        options
+      )
+    );
     if (!isShape3D(newShape)) throw new Error('Could not cut as a 3d shape');
     return newShape;
   }
@@ -971,13 +1080,28 @@ export class _3DShape<Type extends TopoDS_Shape>
    *
    * @category Shape Modifications
    */
-  intersect(tool: AnyShape): Shape3D {
-    const r = GCWithScope();
-    const intersector = r(new this.oc.BRepAlgoAPI_Common(this.wrapped, tool.wrapped));
-    intersector.Build();
-    intersector.SimplifyResult(true, true, 1e-3);
+  intersect(tool: AnyShape, options: BooleanOperationOptions = {}): Shape3D {
+    return this.intersectAll([tool], options);
+  }
 
-    const newShape = cast(intersector.Shape());
+  /**
+   * Builds a new shape by intersecting this shape with all provided shapes in
+   * one OCCT boolean operation.
+   *
+   * @category Shape Modifications
+   */
+  intersectAll(tools: readonly AnyShape[], options: BooleanOperationOptions = {}): Shape3D {
+    if (tools.length === 0) throw new Error('Cannot intersect with an empty shape list');
+
+    const newShape = cast(
+      runBooleanBatch(
+        this.oc,
+        'common',
+        [this.wrapped],
+        tools.map((shape) => shape.wrapped),
+        options
+      )
+    );
     if (!isShape3D(newShape)) throw new Error('Could not intersect as a 3d shape');
     return newShape;
   }

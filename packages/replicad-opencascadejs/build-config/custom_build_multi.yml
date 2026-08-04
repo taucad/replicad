@@ -251,6 +251,8 @@ mainBuild:
   - symbol: ReplicadMeshExtractor
   - symbol: ReplicadEdgeMeshData
   - symbol: ReplicadEdgeMeshExtractor
+  - symbol: ReplicadBooleanBatchResult
+  - symbol: ReplicadBooleanBatch
   emccFlags:
   - -fwasm-exceptions
   - -sEXPORT_EXCEPTION_HANDLING_HELPERS
@@ -277,5 +279,6 @@ additionalCppFiles:
 - wrappers/shape-hasher.cpp
 - wrappers/mesh-extractor.cpp
 - wrappers/edge-mesh-extractor.cpp
+- wrappers/boolean-batch.cpp
 - wrappers/brep-io.cpp
 - wrappers/geom2d-io.cpp

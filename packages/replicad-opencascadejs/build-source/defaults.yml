@@ -281,6 +281,8 @@ bindings:
   - symbol: ReplicadMeshExtractor
   - symbol: ReplicadEdgeMeshData
   - symbol: ReplicadEdgeMeshExtractor
+  - symbol: ReplicadBooleanBatchResult
+  - symbol: ReplicadBooleanBatch
 
 buildFlags:
   - -fwasm-exceptions
