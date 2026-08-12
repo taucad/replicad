@@ -15,7 +15,7 @@ import { getOC } from "./oclib.js";
 import { getManifold } from "./manifoldlib.js";
 import { MeshShape } from "./meshShapes.js";
 
-import {
+import type {
   TopoDS_Face,
   TopoDS_Shape,
   TopoDS_Edge,
@@ -26,7 +26,6 @@ import {
   TopoDS_Compound,
   TopoDS_CompSolid,
   TopAbs_ShapeEnum,
-  STEPControl_StepModelType,
   gp_Vec,
   gp_Pnt,
   Adaptor3d_Surface,
@@ -279,11 +278,7 @@ export const iterTopo = function* iterTopo(
   topo: TopoEntity
 ): IterableIterator<TopoDS_Shape> {
   const oc = getOC();
-  const explorer = new oc.TopExp_Explorer(
-    shape,
-    asTopo(topo),
-    asTopo("shape")
-  );
+  const explorer = new oc.TopExp_Explorer(shape, asTopo(topo), asTopo("shape"));
   const seen: TopoDS_Shape[] = [];
   while (explorer.More()) {
     const item = explorer.Current();
@@ -335,7 +330,7 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
   }
 
   get hashCode(): number {
-    return this.oc.OCJS_ShapeHasher.HashCode(this.wrapped, HASH_CODE_MAX);
+    return this.oc.ReplicadShapeHasher.HashCode(this.wrapped, HASH_CODE_MAX);
   }
 
   get isNull(): boolean {
@@ -648,8 +643,7 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
 
     writer.Transfer(
       this.wrapped,
-      this.oc.STEPControl_StepModelType
-        .STEPControl_AsIs,
+      this.oc.STEPControl_StepModelType.STEPControl_AsIs,
       true,
       progress
     );
@@ -853,7 +847,7 @@ export class Edge extends _1DShape<TopoDS_Edge> {
 
 export class Wire extends _1DShape<TopoDS_Wire> {
   protected _geomAdaptor(): BRepAdaptor_CompCurve {
-    return new this.oc.BRepAdaptor_CompCurve(this.wrapped);
+    return new this.oc.BRepAdaptor_CompCurve(this.wrapped, false);
   }
 
   offset2D(
@@ -868,7 +862,8 @@ export class Wire extends _1DShape<TopoDS_Wire> {
 
     const offsetter = new this.oc.BRepOffsetAPI_MakeOffset(
       this.wrapped,
-      kinds[kind]
+      kinds[kind],
+      false
     );
     offsetter.Perform(offset, 0);
 
@@ -919,7 +914,7 @@ export class Surface extends WrappingObj<Adaptor3d_Surface> {
 
 export class Face extends Shape<TopoDS_Face> {
   protected _geomAdaptor(): Adaptor3d_Surface {
-    return new this.oc.BRepAdaptor_Surface(this.wrapped);
+    return new this.oc.BRepAdaptor_Surface(this.wrapped, false);
   }
 
   get surface(): Surface {
@@ -975,7 +970,11 @@ export class Face extends Shape<TopoDS_Face> {
     const surface = r(this.oc.BRep_Tool.Surface(this.wrapped));
 
     const projectedPoint = r(
-      new this.oc.GeomAPI_ProjectPointOnSurf(r(asPnt(point)), surface)
+      new this.oc.GeomAPI_ProjectPointOnSurf(
+        r(asPnt(point)),
+        surface,
+        this.oc.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad
+      )
     );
 
     const { U, V } = projectedPoint.LowerDistanceParameters(0, 0);
@@ -1571,19 +1570,18 @@ export function downcast(shape: TopoDS_Shape): GenericTopo {
   const oc = getOC();
   const ta = oc.TopAbs_ShapeEnum;
 
-  const CAST_MAP = new Map<
-    TopAbs_ShapeEnum,
-    (s: TopoDS_Shape) => TopoDS_Shape
-  >([
-    [ta.TopAbs_VERTEX, oc.TopoDS.Vertex],
-    [ta.TopAbs_EDGE, oc.TopoDS.Edge],
-    [ta.TopAbs_WIRE, oc.TopoDS.Wire],
-    [ta.TopAbs_FACE, oc.TopoDS.Face],
-    [ta.TopAbs_SHELL, oc.TopoDS.Shell],
-    [ta.TopAbs_SOLID, oc.TopoDS.Solid],
-    [ta.TopAbs_COMPSOLID, oc.ReplicadShapeCaster.CompSolid],
-    [ta.TopAbs_COMPOUND, oc.TopoDS.Compound],
-  ]);
+  const CAST_MAP = new Map<TopAbs_ShapeEnum, (s: TopoDS_Shape) => TopoDS_Shape>(
+    [
+      [ta.TopAbs_VERTEX, oc.TopoDS.Vertex],
+      [ta.TopAbs_EDGE, oc.TopoDS.Edge],
+      [ta.TopAbs_WIRE, oc.TopoDS.Wire],
+      [ta.TopAbs_FACE, oc.TopoDS.Face],
+      [ta.TopAbs_SHELL, oc.TopoDS.Shell],
+      [ta.TopAbs_SOLID, oc.TopoDS.Solid],
+      [ta.TopAbs_COMPSOLID, oc.ReplicadShapeCaster.CompSolid],
+      [ta.TopAbs_COMPOUND, oc.TopoDS.Compound],
+    ]
+  );
 
   const myType = shapeType(shape);
   const caster = CAST_MAP.get(myType);

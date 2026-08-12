@@ -1,4 +1,6 @@
-/build-config/*.build-manifest.json
-/build-config/*.provenance.json
+# `libcascade build` scratch: rendered ymls and raw container output.
+/.libcascade/
 /dist/*.build-manifest.json
+/dist/replicad_*.d.ts
 /dist/*.provenance.json
+/dist/exports.json

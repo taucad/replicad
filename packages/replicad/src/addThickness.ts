@@ -14,7 +14,7 @@ import { makeLine, makeHelix, assembleWire, makeVertex } from "./shapeHelpers";
 import { localGC } from "./register";
 import { Vector, makeAx1, Point } from "./geom";
 import { DEG2RAD } from "./constants";
-import {
+import type {
   Law_Function,
   Law_Linear,
   Law_S,
@@ -299,7 +299,7 @@ export const loft = (
   const [r, gc] = localGC();
 
   const loftBuilder = r(
-    new oc.BRepOffsetAPI_ThruSections(!returnShell, ruled)
+    new oc.BRepOffsetAPI_ThruSections(!returnShell, ruled, 1e-6)
   );
 
   if (startPoint) {

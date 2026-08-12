@@ -15,7 +15,7 @@ import { asPnt, makeAx3, makeAx2, Point, Vector, makeAx1 } from "./geom";
 import { getOC } from "./oclib.js";
 import { GCWithScope, localGC, WrappingObj } from "./register.js";
 import zip from "./utils/zip";
-import {
+import type {
   GeomAPI_PointsToBSpline,
   gp_GTrsf,
   gp_Pnt,
@@ -23,9 +23,7 @@ import {
 
 export const makeLine = (v1: Point, v2: Point): Edge => {
   const oc = getOC();
-  return new Edge(
-    new oc.BRepBuilderAPI_MakeEdge(asPnt(v1), asPnt(v2)).Edge()
-  );
+  return new Edge(new oc.BRepBuilderAPI_MakeEdge(asPnt(v1), asPnt(v2)).Edge());
 };
 
 export const makeCircle = (
@@ -106,10 +104,7 @@ export const makeHelix = (
   );
 
   const e = r(
-    new oc.BRepBuilderAPI_MakeEdge(
-      r(geomSeg.Value()),
-      r(geomSurf)
-    )
+    new oc.BRepBuilderAPI_MakeEdge(r(geomSeg.Value()), r(geomSurf))
   ).Edge();
 
   // 4. Convert to wire and fix building 3d geom from 2d geom
@@ -333,14 +328,21 @@ export const makeNonPlanarFace = (wire: Wire): Face => {
   const [r, gc] = localGC();
 
   const faceBuilder = r(
-    new oc.BRepOffsetAPI_MakeFilling()
+    new oc.BRepOffsetAPI_MakeFilling(
+      3,
+      15,
+      2,
+      false,
+      1e-5,
+      1e-4,
+      1e-2,
+      0.1,
+      8,
+      9
+    )
   );
   wire.edges.forEach((edge) => {
-    faceBuilder.Add(
-      r(edge).wrapped,
-      oc.GeomAbs_Shape.GeomAbs_C0,
-      true
-    );
+    faceBuilder.Add(r(edge).wrapped, oc.GeomAbs_Shape.GeomAbs_C0, true);
   });
 
   faceBuilder.Build();
@@ -528,7 +530,9 @@ function _weld(facesOrShells: Array<Face | Shell>): AnyShape {
   const oc = getOC();
   const r = GCWithScope();
 
-  const shellBuilder = r(new oc.BRepBuilderAPI_Sewing(1e-6, true, true, true));
+  const shellBuilder = r(
+    new oc.BRepBuilderAPI_Sewing(1e-6, true, true, true, false)
+  );
 
   facesOrShells.forEach(({ wrapped }) => {
     shellBuilder.Add(wrapped);

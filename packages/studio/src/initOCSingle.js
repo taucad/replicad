@@ -1,10 +1,7 @@
-import opencascade from "replicad-opencascadejs";
-import opencascadeWasm from "replicad-opencascadejs/wasm?url";
+import { createInstance } from "replicad-opencascadejs/single/init";
+import opencascadeWasm from "replicad-opencascadejs/single/wasm?url";
 
-export default async () => {
-  const OC = await opencascade({
+export default async () =>
+  createInstance({
     locateFile: () => opencascadeWasm,
   });
-
-  return OC;
-};

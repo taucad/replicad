@@ -1,56 +1,81 @@
 {
-  "name": "@taulabs/replicad-opencascadejs",
-  "version": "0.23.0-beta.0",
-  "description": "OpencascadeJS custom build for replicad (Tau fork: SIMD without relaxed-simd, native WebAssembly exceptions)",
+  "name": "replicad-opencascadejs",
+  "version": "0.23.0",
+  "description": "OpencascadeJS custom build for replicad",
   "author": "Steve Genoud <steve@sgenoud.com>",
   "homepage": "",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/taucad/replicad.git",
-    "directory": "packages/replicad-opencascadejs"
-  },
-  "bugs": {
-    "url": "https://github.com/taucad/replicad/issues"
-  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/replicad_single.cjs",
-  "module": "./dist/replicad_single.js",
-  "types": "./dist/replicad_single.d.ts",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/replicad_single.d.ts",
-      "import": "./dist/replicad_single.js",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "require": "./dist/replicad_single.cjs",
-      "default": "./dist/replicad_single.js"
+      "default": "./dist/index.js"
     },
     "./wasm": "./dist/replicad_single.wasm",
     "./multi": {
-      "types": "./dist/replicad_multi.d.ts",
+      "types": "./dist/variant.d.ts",
       "import": "./dist/replicad_multi.js",
       "require": "./dist/replicad_multi.cjs",
       "default": "./dist/replicad_multi.js"
     },
     "./multi/wasm": "./dist/replicad_multi.wasm",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./init": {
+      "types": "./dist/init.d.ts",
+      "import": "./dist/init.js",
+      "default": "./dist/init.js"
+    },
+    "./single": {
+      "types": "./dist/variant.d.ts",
+      "import": "./dist/replicad_single.js",
+      "default": "./dist/replicad_single.js"
+    },
+    "./single/wasm": "./dist/replicad_single.wasm",
+    "./single/init": {
+      "types": "./dist/init.single.d.ts",
+      "import": "./dist/init.single.js",
+      "default": "./dist/init.single.js"
+    },
+    "./multi/init": {
+      "types": "./dist/init.multi.d.ts",
+      "import": "./dist/init.multi.js",
+      "default": "./dist/init.multi.js"
+    }
   },
   "files": [
+    "dist/types.d.ts",
+    "dist/init.js",
+    "dist/init.d.ts",
+    "dist/variant.d.ts",
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/init.single.js",
+    "dist/init.single.d.ts",
+    "dist/init.multi.js",
+    "dist/init.multi.d.ts",
     "dist/replicad_single.js",
     "dist/replicad_single.wasm",
-    "dist/replicad_single.d.ts",
     "dist/replicad_single.cjs",
     "dist/replicad_multi.js",
     "dist/replicad_multi.wasm",
-    "dist/replicad_multi.d.ts",
     "dist/replicad_multi.cjs",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "pnpm run generateConfig && pnpm run buildSingle && pnpm run buildMulti",
-    "generateConfig": "ytt -f build-source/ --output-files build-config",
-    "buildSingle": "cd build-config && docker run --rm -v \"$(pwd):/src\" -u \"$(id -u):$(id -g)\" ghcr.io/taucad/opencascade.js:canary-ebd263f1-single-threaded link custom_build_single.yml && mkdir -p ../dist && mv replicad_single.js replicad_single.wasm replicad_single.d.ts ../dist/ && cd -",
-    "buildMulti": "cd build-config && docker run --rm -v \"$(pwd):/src\" -u \"$(id -u):$(id -g)\" ghcr.io/taucad/opencascade.js:canary-ebd263f1-multi-threaded link custom_build_multi.yml && mkdir -p ../dist && mv replicad_multi.js replicad_multi.wasm replicad_multi.d.ts ../dist/ && cd -",
-    "test": "node --test __tests__/*.test.mjs"
+    "build": "pnpm run buildSingle && pnpm run buildMulti && pnpm run assemble",
+    "buildSingle": "libcascade build --variant single",
+    "buildMulti": "libcascade build --variant multi",
+    "assemble": "libcascade assemble",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@libcascade/toolchain": "3.0.0-beta.3",
+    "vitest": "^0.28.3"
   }
 }

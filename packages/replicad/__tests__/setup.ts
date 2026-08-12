@@ -1,5 +1,5 @@
 import { expect, beforeAll } from "vitest";
-import opencascade from "replicad-opencascadejs";
+import { createInstance } from "replicad-opencascadejs/single/init";
 import { setOC } from "../src/index";
 import toMatchSVGSnapshot from "./toMatchSVGSnapshot";
 
@@ -15,7 +15,7 @@ beforeAll(async function () {
   if (globalThis.replicadInit) return;
   expect.extend({ toMatchSVGSnapshot });
 
-  const OC = await opencascade();
+  const OC = await createInstance();
 
   setOC(OC);
   globalThis.replicadInit = true;

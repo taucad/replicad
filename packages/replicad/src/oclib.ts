@@ -1,4 +1,4 @@
-import { OpenCascadeInstance } from "replicad-opencascadejs";
+import type { OpenCascadeInstance } from "replicad-opencascadejs";
 
 const OC: { library: OpenCascadeInstance | null } = {
   library: null,

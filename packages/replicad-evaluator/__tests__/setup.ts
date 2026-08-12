@@ -1,5 +1,5 @@
 import { beforeAll } from "vitest";
-import opencascade from "replicad-opencascadejs";
+import { createInstance } from "replicad-opencascadejs/single/init";
 import * as replicad from "../../replicad/src/index";
 
 declare global {
@@ -10,7 +10,7 @@ declare global {
 beforeAll(async () => {
   if (globalThis.replicadEvaluatorReady) return;
 
-  globalThis.replicadEvaluatorOC = await opencascade();
+  globalThis.replicadEvaluatorOC = await createInstance();
 
   replicad.setOC(globalThis.replicadEvaluatorOC);
   globalThis.replicadEvaluatorReady = true;

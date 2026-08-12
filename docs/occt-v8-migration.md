@@ -13,9 +13,11 @@ Replicad now ships two builds with the same generated binding surface:
 
 The former `replicad_with_exceptions` build is removed. Both remaining builds use `-fwasm-exceptions`, so callers no longer need to choose between an exception-enabled and exception-disabled artifact.
 
+Consumers calling OpenCascade.js directly can decode a caught `WebAssembly.Exception` with `oc.getExceptionMessage(error)`, which returns the OCCT exception type and message. `replicad-evaluator` applies this decoding automatically when reporting failed geometry operations.
+
 The multi build remains available for consumers that provide the browser isolation and worker environment required by Emscripten pthreads. Replicad's normal API is identical between the single and multi entry points.
 
-The package exposes the generated modules directly to ESM consumers and provides small CommonJS compatibility shims for `require()`. Both entry points initialize the same generated ESM modules and WebAssembly artifacts.
+The ESM root exports a ready OpenCascade instance. Consumers that own startup timing use `./init`, while `./single/init` and `./multi/init` load one fixed variant without pulling the other variant into the bundle. Raw glue and WASM subpaths remain available for custom loaders. Small CommonJS compatibility shims preserve the existing root and `/multi` factories for `require()` consumers.
 
 ## OCCT 8 binding changes
 
@@ -49,24 +51,24 @@ These wrappers are part of the required `replicad-opencascadejs` module contract
 
 ## Build inputs
 
-The build source lives in `packages/replicad-opencascadejs/build-source`. Generate the concrete configuration and build both artifacts with:
+The build source is the typed `packages/replicad-opencascadejs/libcascade.config.ts`, driven by the `@libcascade/toolchain` CLI. Docker must be installed and its daemon running. Build both artifacts and regenerate the packaging surface with:
 
 ```sh
-pnpm --dir packages/replicad-opencascadejs run generateConfig
 pnpm --dir packages/replicad-opencascadejs run buildSingle
 pnpm --dir packages/replicad-opencascadejs run buildMulti
+pnpm --dir packages/replicad-opencascadejs run assemble
 ```
 
-This migration is built from the immutable OCCT 8.0.1 canary inputs:
+This migration is built with `@libcascade/toolchain@3.0.0-beta.3` from the immutable OCCT 8.0.1 beta inputs:
 
-| Image                                                           | OCI index digest                                                          |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `ghcr.io/taucad/opencascade.js:canary-ebd263f1-single-threaded` | `sha256:215198af0e2ca4c5f308e5540869f2419784dc290062d3eb03d34e4f22e0188c` |
-| `ghcr.io/taucad/opencascade.js:canary-ebd263f1-multi-threaded`  | `sha256:5cb67064edc903ae50c254e32417da9662fa88ec2e734386c28a3806949862ce` |
+| Image                                                        | OCI index digest                                                          |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `ghcr.io/taucad/opencascade.js:3.0.0-beta.3-single-threaded` | `sha256:f4ebf133b6fcd508e34ea239b7c07514fb8920d566f3ca0601f7275f8e88227a` |
+| `ghcr.io/taucad/opencascade.js:3.0.0-beta.3-multi-threaded`  | `sha256:687b97bd12348988ebfc724a3f3c3d95d48b07b547b60f0dc7ce1fee4dc743ee` |
 
-Adopting a later stable OpenCascade.js/libcascade 3.0.0 image is a separate follow-up. It is not part of this migration branch.
+Adopting the stable libcascade 3.0.0 images is a separate follow-up. It is not part of this migration branch.
 
-The generated package contains only the runtime artifacts listed in `package.json`: JavaScript glue, WebAssembly, and declarations for both variants. Build manifests, provenance JSON, and linker symbol maps remain local diagnostics and are not versioned or packed.
+The generated package contains only the runtime artifacts listed in `package.json`: JavaScript glue and WebAssembly for both variants, the assembled `index`, `init`, and variant entries, and the shared `types.d.ts` surface. Per-variant declarations remain checked-in build inputs to `libcascade assemble` but are not packed. Build manifests, provenance JSON, and linker symbol maps remain local diagnostics and are not versioned or packed.
 
 ## Verification
 

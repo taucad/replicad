@@ -1,16 +1,30 @@
-import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { expect, test } from "vitest";
 
 import initMulti from "../dist/replicad_multi.js";
 import initSingle from "../dist/replicad_single.js";
 
 const require = createRequire(import.meta.url);
-const initSingleCjs = require("@taulabs/replicad-opencascadejs");
-const initMultiCjs = require("@taulabs/replicad-opencascadejs/multi");
+// These calls deliberately exercise the package's CommonJS export conditions.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const initSingleCjs = require("replicad-opencascadejs");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const initMultiCjs = require("replicad-opencascadejs/multi");
+const packageRoot = dirname(
+  require.resolve("replicad-opencascadejs/package.json")
+);
+const packageExports = JSON.parse(
+  readFileSync(join(packageRoot, "package.json"), "utf8")
+).exports;
+const importSelf = (specifier) => {
+  const suffix = specifier.slice("replicad-opencascadejs".length);
+  const entry = packageExports[suffix ? `.${suffix}` : "."];
+  const target = typeof entry === "string" ? entry : entry.import;
+  return import(pathToFileURL(resolve(packageRoot, target)).href);
+};
 
 const HASH_CODE_MAX = 2_147_483_647;
 const TOLERANCE = 0.1;
@@ -19,12 +33,58 @@ const distDir = fileURLToPath(new URL("../dist/", import.meta.url));
 const multiGluePath = join(distDir, "replicad_multi.js");
 
 test("CommonJS entry points expose the existing module factories", async () => {
-  assert.equal(typeof initMultiCjs, "function");
+  expect(typeof initMultiCjs).toBe("function");
   const oc = await initSingleCjs({
     locateFile: () => join(distDir, "replicad_single.wasm"),
   });
-  assert.equal(typeof oc.BRepPrimAPI_MakeBox, "function");
+  expect(typeof oc.BRepPrimAPI_MakeBox).toBe("function");
 });
+
+test("the ESM root exports a ready instance", async () => {
+  const selector = Symbol.for("replicad-opencascadejs.select");
+  global[selector] = "single";
+
+  try {
+    const { default: oc } = await importSelf("replicad-opencascadejs");
+    expect(typeof oc.BRepPrimAPI_MakeBox).toBe("function");
+  } finally {
+    delete global[selector];
+  }
+});
+
+test("the shared init entry instantiates a requested variant", async () => {
+  const { createInstance } = await importSelf("replicad-opencascadejs/init");
+  const oc = await createInstance({
+    variant: "single",
+    locateFile: () => join(distDir, "replicad_single.wasm"),
+  });
+  expect(typeof oc.BRepPrimAPI_MakeBox).toBe("function");
+  expect(oc.wasmMemory.buffer).toBeInstanceOf(ArrayBuffer);
+});
+
+test("the fixed single init entry instantiates the single build", async () => {
+  const { createInstance: createSingle } = await importSelf(
+    "replicad-opencascadejs/single/init"
+  );
+  const oc = await createSingle({
+    locateFile: () => join(distDir, "replicad_single.wasm"),
+  });
+  expect(typeof oc.BRepPrimAPI_MakeBox).toBe("function");
+  expect(oc.wasmMemory.buffer).toBeInstanceOf(ArrayBuffer);
+});
+
+test("the fixed multi init entry instantiates the pthread build", async () => {
+  const { createInstance: createMulti } = await importSelf(
+    "replicad-opencascadejs/multi/init"
+  );
+  const oc = await createMulti({
+    locateFile: () => join(distDir, "replicad_multi.wasm"),
+    threadCount: 2,
+  });
+  expect(typeof oc.BRepPrimAPI_MakeBox).toBe("function");
+  expect(oc.wasmMemory.buffer).toBeInstanceOf(SharedArrayBuffer);
+});
+
 const runtimes = [
   {
     name: "single",
@@ -89,12 +149,12 @@ const readEdgeMesh = (oc, result) => ({
 });
 
 const assertFloatArraysClose = (actual, expected, tolerance = 1e-5) => {
-  assert.equal(actual.length, expected.length);
+  expect(actual.length).toBe(expected.length);
   for (let index = 0; index < actual.length; index++) {
-    assert.ok(
-      Math.abs(actual[index] - expected[index]) <= tolerance,
+    expect(
+      Math.abs(actual[index] - expected[index]),
       `value ${index} differs: ${actual[index]} !== ${expected[index]}`
-    );
+    ).toBeLessThanOrEqual(tolerance);
   }
 };
 
@@ -166,7 +226,7 @@ const expectedEdges = (oc, shape) =>
               groups.push(
                 start,
                 lines.length / 3 - start,
-                oc.OCJS_ShapeHasher.HashCode(edge, HASH_CODE_MAX)
+                oc.ReplicadShapeHasher.HashCode(edge, HASH_CODE_MAX)
               );
             }
           }
@@ -211,7 +271,7 @@ const expectedEdges = (oc, shape) =>
           groups.push(
             start,
             lines.length / 3 - start,
-            oc.OCJS_ShapeHasher.HashCode(edge, HASH_CODE_MAX)
+            oc.ReplicadShapeHasher.HashCode(edge, HASH_CODE_MAX)
           );
         }
       }
@@ -240,7 +300,7 @@ const expectedFaceIds = (oc, shape) =>
         oc.BRep_Tool.Triangulation(face, location, 0)
       );
       if (triangulation && !triangulation.isNull()) {
-        ids.push(oc.OCJS_ShapeHasher.HashCode(face, HASH_CODE_MAX));
+        ids.push(oc.ReplicadShapeHasher.HashCode(face, HASH_CODE_MAX));
       }
       explorer.Next();
     }
@@ -250,10 +310,10 @@ const expectedFaceIds = (oc, shape) =>
 
 for (const runtime of runtimes) {
   const init = async () => {
-    assert.ok(
+    expect(
       existsSync(runtime.wasmPath),
       `Missing ${runtime.wasmPath}; run pnpm build first`
-    );
+    ).toBe(true);
     return runtime.initialize(runtime.wasmPath);
   };
   const variantTest = (name, callback) =>
@@ -279,21 +339,17 @@ for (const runtime of runtimes) {
 
       try {
         for (const upperBound of [1, 7, 1_024, HASH_CODE_MAX]) {
-          const hash = oc.OCJS_ShapeHasher.HashCode(shape, upperBound);
-          assert.ok(
-            hash >= 1 && hash <= upperBound,
-            `${hash} is outside [1, ${upperBound}]`
-          );
-          assert.equal(oc.OCJS_ShapeHasher.HashCode(shape, upperBound), hash);
-          assert.equal(
-            oc.OCJS_ShapeHasher.HashCode(reversed, upperBound),
+          const hash = oc.ReplicadShapeHasher.HashCode(shape, upperBound);
+          expect(hash).toBeGreaterThanOrEqual(1);
+          expect(hash).toBeLessThanOrEqual(upperBound);
+          expect(oc.ReplicadShapeHasher.HashCode(shape, upperBound)).toBe(hash);
+          expect(oc.ReplicadShapeHasher.HashCode(reversed, upperBound)).toBe(
             hash
           );
         }
 
-        assert.notEqual(
-          oc.OCJS_ShapeHasher.HashCode(shape, HASH_CODE_MAX),
-          oc.OCJS_ShapeHasher.HashCode(movedShape, HASH_CODE_MAX)
+        expect(oc.ReplicadShapeHasher.HashCode(shape, HASH_CODE_MAX)).not.toBe(
+          oc.ReplicadShapeHasher.HashCode(movedShape, HASH_CODE_MAX)
         );
       } finally {
         movedShape.delete();
@@ -331,26 +387,21 @@ for (const runtime of runtimes) {
         const faceIds = expectedFaceIds(oc, shape);
         const expectedEdgeMesh = expectedEdges(oc, shape);
 
-        assert.deepEqual(
-          faceMesh.groups.filter((_, index) => index % 3 === 2),
+        expect(faceMesh.groups.filter((_, index) => index % 3 === 2)).toEqual(
           faceIds
         );
-        assert.deepEqual(edgeMesh.groups, expectedEdgeMesh.groups);
-        assert.equal(
-          edgeMesh.groups.length / 3,
-          12,
-          "a box has 12 exactly deduplicated edges"
-        );
+        expect(edgeMesh.groups).toEqual(expectedEdgeMesh.groups);
+        expect(edgeMesh.groups.length / 3).toBe(12);
 
         let lineVertexTotal = 0;
         for (let index = 0; index < edgeMesh.groups.length; index += 3) {
           const start = edgeMesh.groups[index];
           const lineVertexCount = edgeMesh.groups[index + 1];
-          assert.equal(start, lineVertexTotal);
-          assert.equal(lineVertexCount % 2, 0);
+          expect(start).toBe(lineVertexTotal);
+          expect(lineVertexCount % 2).toBe(0);
           lineVertexTotal += lineVertexCount;
         }
-        assert.equal(lineVertexTotal, edgeMesh.lines.length / 3);
+        expect(lineVertexTotal).toBe(edgeMesh.lines.length / 3);
       } finally {
         edgeResult.delete();
         faceResult.delete();
@@ -388,7 +439,7 @@ for (const runtime of runtimes) {
         const actual = readEdgeMesh(oc, result);
         const expected = expectedEdges(oc, shape);
         assertFloatArraysClose(actual.lines, expected.lines);
-        assert.deepEqual(actual.groups, expected.groups);
+        expect(actual.groups).toEqual(expected.groups);
       } finally {
         result.delete();
         shape.delete();
@@ -421,7 +472,7 @@ for (const runtime of runtimes) {
         const expected = expectedEdges(oc, edge);
         const regular = readEdgeMesh(oc, regularResult);
         assertFloatArraysClose(regular.lines, expected.lines);
-        assert.deepEqual(regular.groups, expected.groups);
+        expect(regular.groups).toEqual(expected.groups);
       } finally {
         regularResult.delete();
         edge.delete();

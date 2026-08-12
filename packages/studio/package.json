@@ -54,7 +54,7 @@
     "react-use-rect": "^2.0.6",
     "replicad": "workspace:@taulabs/replicad@^",
     "replicad-evaluator": "workspace:^",
-    "replicad-opencascadejs": "workspace:@taulabs/replicad-opencascadejs@^",
+    "replicad-opencascadejs": "workspace:^",
     "replicad-threejs-helper": "workspace:^",
     "styled-components": "^5.3.11",
     "three": "^0.155.0",

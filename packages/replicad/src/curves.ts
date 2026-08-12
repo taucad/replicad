@@ -1,4 +1,4 @@
-import { gp_GTrsf2d, Geom_Surface } from "replicad-opencascadejs";
+import type { gp_GTrsf2d, Geom_Surface } from "replicad-opencascadejs";
 
 import { GCWithScope, localGC, WrappingObj } from "./register";
 import type { Deletable } from "./register";
@@ -254,7 +254,10 @@ export function edgeToCurve(e: Edge, face: Face): Curve2D {
   return new Curve2D(trimmed);
 }
 
-const poles3dTo2d = (poles: any, register: <T extends Deletable>(value: T) => T) => {
+const poles3dTo2d = (
+  poles: any,
+  register: <T extends Deletable>(value: T) => T
+) => {
   const oc = getOC();
   const poles2d = register(
     new oc.NCollection_Array1_gp_Pnt2d(poles.Lower(), poles.Upper())
@@ -275,7 +278,10 @@ const direction3dTo2d = (direction: any): Point2D => [
   direction.Y(),
 ];
 
-const axis3dTo2d = (axis: any, register: <T extends Deletable>(value: T) => T) => {
+const axis3dTo2d = (
+  axis: any,
+  register: <T extends Deletable>(value: T) => T
+) => {
   const oc = getOC();
 
   const location = register(axis.Location());
@@ -367,10 +373,7 @@ export function edgeToCurveOnPlane(e: Edge): Curve2D {
       : new oc.Geom2d_BezierCurve(poles);
     curveCopy.Segment(firstParameter, lastParameter);
 
-    return orientCurveLikeEdge(
-      new Curve2D(curveCopy),
-      e
-    );
+    return orientCurveLikeEdge(new Curve2D(curveCopy), e);
   }
 
   if (curveType === "BSPLINE_CURVE") {
@@ -394,10 +397,7 @@ export function edgeToCurveOnPlane(e: Edge): Curve2D {
         );
     curveCopy.Segment(firstParameter, lastParameter, 1e-9);
 
-    return orientCurveLikeEdge(
-      new Curve2D(curveCopy),
-      e
-    );
+    return orientCurveLikeEdge(new Curve2D(curveCopy), e);
   }
 
   throw new Error(`Unsupported projected curve type: ${curveType}`);

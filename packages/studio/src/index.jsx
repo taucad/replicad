@@ -5,8 +5,6 @@ import * as THREE from "three";
 import App from "./App.jsx";
 import GlobalStyle from "./GlobalStyles.jsx";
 
-import "replicad-opencascadejs/wasm?url";
-
 import { BrowserRouter } from "react-router-dom";
 
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
