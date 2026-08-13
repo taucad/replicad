@@ -75,7 +75,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@libcascade/toolchain": "3.0.0-beta.3",
+    "@libcascade/toolchain": "3.0.0",
     "vitest": "^0.28.3"
   }
 }

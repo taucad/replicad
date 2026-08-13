@@ -4,6 +4,7 @@
     "target": "es6",
     "module":"es2015",
     "strict": true,
+    "types": [],
     "sourceMap": true,
     "skipLibCheck": true,
     "declaration": true,
@@ -18,4 +19,3 @@
       "excludeProtected": true
   }
 }
-
