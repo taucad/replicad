@@ -327,10 +327,6 @@ export default defineBuild({
     ALLOW_MEMORY_GROWTH: true,
     INITIAL_MEMORY: "100MB",
     MAXIMUM_MEMORY: "4GB",
-    // emsdk 6.0.5 migration (opencascade.js 7734d9d): -sEXPORT_EXCEPTION_HANDLING_HELPERS
-    // is replaced by exporting the three exception helpers directly, and the
-    // link pipeline hard-fails on -fwasm-exceptions without them. Same delta
-    // the upstream full.yml received.
     EXPORTED_RUNTIME_METHODS: [
       "FS",
       "wasmMemory",
@@ -339,9 +335,6 @@ export default defineBuild({
       "decrementExceptionRefcount",
     ],
     ENVIRONMENT: ["web", "worker", "node"],
-    // OCCT's OSD_MemInfo references mallinfo, which Emscripten does not provide.
-    // Keep that optional memory-reporting symbol unresolved until OCCT replaces it.
-    ERROR_ON_UNDEFINED_SYMBOLS: false,
     STACK_SIZE: 8_388_608,
     WASM_BIGINT: true,
   },
