@@ -33,7 +33,7 @@
   "devDependencies": {
     "@types/node": "^22.13.1",
     "replicad": "workspace:@taulabs/replicad@^",
-    "replicad-opencascadejs": "^0.23.0",
+    "replicad-opencascadejs": "workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.0",
     "typescript": "5.1.6",
     "vite": "^4.5.5",
     "vite-plugin-dts": "^3.5.2",

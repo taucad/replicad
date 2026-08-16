@@ -45,7 +45,7 @@
     "manifold-3d": "^3.0.1",
     "replicad": "workspace:@taulabs/replicad@^",
     "replicad-evaluator": "workspace:^",
-    "replicad-opencascadejs": "workspace:^",
+    "replicad-opencascadejs": "workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.0",
     "tsx": "^4.20.6"
   },
   "devDependencies": {
