@@ -277,8 +277,8 @@ importers:
   packages/replicad-opencascadejs:
     devDependencies:
       "@libcascade/toolchain":
-        specifier: 3.0.1
-        version: 3.0.1
+        specifier: 3.0.2
+        version: 3.0.2
       vitest:
         specifier: ^0.28.3
         version: 0.28.3(terser@5.38.1)
@@ -4472,10 +4472,10 @@ packages:
       }
     engines: { node: ^14.17.0 || >=16.0.0 }
 
-  "@libcascade/toolchain@3.0.1":
+  "@libcascade/toolchain@3.0.2":
     resolution:
       {
-        integrity: sha512-ZBy8+UFskDyBiDWekavS0LlQXnuj4+HL0kz0Fmf//ca1LT+o0qyhOU9UtaP8N8M6/enxQ+WqEyx7kBNZlN8TAw==,
+        integrity: sha512-ko2ZS9vJ2xX6Rjc5+8NRyTL5Vr1COH6S3SyCHkxrUQpJ6BO1gVRH5N/3v/tLWIkXBsR+1WwCFLUVxJojWg+6Tg==,
       }
     engines: { node: ">=22" }
     hasBin: true
@@ -23615,7 +23615,7 @@ snapshots:
       - encoding
       - supports-color
 
-  "@libcascade/toolchain@3.0.1":
+  "@libcascade/toolchain@3.0.2":
     dependencies:
       jiti: 2.7.0
       yaml: 2.9.0

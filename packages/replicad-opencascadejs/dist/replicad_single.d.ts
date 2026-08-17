@@ -15948,40 +15948,12 @@ declare class BRepGProp_Face {
    */
   GetUKnots(theUMin: number, theUMax: number): NCollection_HArray1_double;
   /**
-   * Returns an array of U knots of the face. The first and last elements of the array will be theUMin and theUMax. The middle elements will be the U Knots of the face greater then theUMin and lower then theUMax in increasing order. If the face is not a BSpline, the array initialized with theUMin and theUMax only.
-   * @param theUMin lower U bound
-   * @param theUMax upper U bound
-   * @returns array of U knot values
-   */
-  GetUKnots_1(theUMin: number, theUMax: number): NCollection_HArray1_double;
-  /**
-   * @returns A result object with fields:
-   * - `theUKnots`: owned by the returned envelope.
-   * Dispose the returned envelope to release owned Handle fields.
-   * @deprecated
-   */
-  GetUKnots_2(theUMin: number, theUMax: number): { theUKnots: NCollection_HArray1_double; [Symbol.dispose](): void };
-  /**
    * Returns an array of combination of T knots of the arc and V knots of the face. The first and last elements of the array will be theTMin and theTMax. The middle elements will be the Knots of the arc and the values of parameters of arc on which the value points have V coordinates close to V knots of face. All the parameter will be greater then theTMin and lower then theTMax in increasing order. If the face is not a BSpline, the array initialized with theTMin and theTMax only.
    * @param theTMin lower T bound
    * @param theTMax upper T bound
    * @returns array of T knot values
    */
   GetTKnots(theTMin: number, theTMax: number): NCollection_HArray1_double;
-  /**
-   * Returns an array of combination of T knots of the arc and V knots of the face. The first and last elements of the array will be theTMin and theTMax. The middle elements will be the Knots of the arc and the values of parameters of arc on which the value points have V coordinates close to V knots of face. All the parameter will be greater then theTMin and lower then theTMax in increasing order. If the face is not a BSpline, the array initialized with theTMin and theTMax only.
-   * @param theTMin lower T bound
-   * @param theTMax upper T bound
-   * @returns array of T knot values
-   */
-  GetTKnots_1(theTMin: number, theTMax: number): NCollection_HArray1_double;
-  /**
-   * @returns A result object with fields:
-   * - `theTKnots`: owned by the returned envelope.
-   * Dispose the returned envelope to release owned Handle fields.
-   * @deprecated
-   */
-  GetTKnots_2(theTMin: number, theTMax: number): { theTKnots: NCollection_HArray1_double; [Symbol.dispose](): void };
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
