@@ -385,13 +385,18 @@ export class Transformation extends WrappingObj<gp_Trsf> {
   }
 
   transform(shape: TopoDS_Shape): TopoDS_Shape {
+    // Rigid transformations only move the shape location (no geometry copy),
+    // so the result keeps sharing its TShape with the source. Scaling and
+    // mirroring still rebuild the geometry.
     const transformer = new this.oc.BRepBuilderAPI_Transform(
       shape,
       this.wrapped,
-      true,
+      false,
       false
     );
-    return transformer.ModifiedShape(shape);
+    const transformed = transformer.Shape();
+    transformer.delete();
+    return transformed;
   }
 }
 
