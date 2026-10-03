@@ -1,8 +1,12 @@
 import type {
   Quantity_ColorRGBA,
   TCollection_ExtendedString,
+  TDF_Label,
   TDocStd_Document,
 } from "replicad-opencascadejs";
+// NOTE: XCAFDoc_VisMaterial* (PBR visual materials) are deliberately omitted from
+// the replicad-opencascadejs WASM build — they depend on Graphic3d/TKService which
+// requires TKOpenGl (unavailable in WASM).
 import { uuidv } from "../utils/uuid";
 import { getOC } from "../oclib";
 import { AnyShape } from "../shapes";
@@ -36,11 +40,66 @@ const wrapColor = (hex: string, alpha = 1): Quantity_ColorRGBA => {
 
 export class AssemblyExporter extends WrappingObj<TDocStd_Document> {}
 
-type ShapeConfig = {
+export type ShapeConfig = {
   shape: AnyShape;
   color?: string;
   alpha?: number;
   name?: string;
+  /** PBR metalness factor (0 = dielectric, 1 = metal). Threaded to GLTF only (not STEP; see note above). */
+  metalness?: number;
+  /** PBR roughness factor — threaded to GLTF only (not STEP; see note above). */
+  roughness?: number;
+  /** Material density in g/cm3, written as the shape's STEP material. */
+  density?: number;
+};
+
+interface HAsciiString {
+  delete(): void;
+}
+
+interface MaterialTool {
+  SetMaterial(
+    label: TDF_Label,
+    name: HAsciiString,
+    description: HAsciiString,
+    density: number,
+    densityName: HAsciiString,
+    densityValueType: HAsciiString
+  ): void;
+}
+
+/**
+ * Typed bindings of `XCAFDoc_MaterialTool` and `TCollection_HAsciiString`,
+ * which only Tau's OpenCascade build declares and exports.
+ */
+interface MaterialBindings {
+  TCollection_HAsciiString?: new (value: string) => HAsciiString;
+}
+
+const makeMaterialWriter = (mainLabel: TDF_Label) => {
+  const oc = getOC();
+  const { TCollection_HAsciiString } = oc as unknown as MaterialBindings;
+  if (!TCollection_HAsciiString) {
+    throw new Error(
+      "Shape density needs an OpenCascade build with material bindings"
+    );
+  }
+
+  const wrapAscii = (value: string) => new TCollection_HAsciiString(value);
+  const matTool = oc.XCAFDoc_DocumentTool.MaterialTool(
+    mainLabel
+  ) as MaterialTool;
+
+  return (label: TDF_Label, name: string, density: number) => {
+    matTool.SetMaterial(
+      label,
+      wrapAscii(name),
+      wrapAscii(""),
+      density,
+      wrapAscii("g/cm3"),
+      wrapAscii("POSITIVE_RATIO_MEASURE")
+    );
+  };
 };
 
 export function createAssembly(shapes: ShapeConfig[] = []): AssemblyExporter {
@@ -54,8 +113,10 @@ export function createAssembly(shapes: ShapeConfig[] = []): AssemblyExporter {
 
   const tool = oc.XCAFDoc_DocumentTool.ShapeTool(mainLabel);
   const ctool = oc.XCAFDoc_DocumentTool.ColorTool(mainLabel);
+  // The material tool is only bound in Tau's build: create it on first use.
+  let setMaterial: ReturnType<typeof makeMaterialWriter> | undefined;
 
-  for (const { shape, name, color, alpha } of shapes) {
+  for (const { shape, name, color, alpha, density } of shapes) {
     const shapeNode = tool.NewShape();
 
     tool.SetShape(shapeNode, shape.wrapped);
@@ -67,6 +128,11 @@ export function createAssembly(shapes: ShapeConfig[] = []): AssemblyExporter {
       wrapColor(color || "#f00", alpha ?? 1),
       oc.XCAFDoc_ColorType.XCAFDoc_ColorSurf
     );
+
+    if (density !== undefined) {
+      setMaterial ??= makeMaterialWriter(mainLabel);
+      setMaterial(shapeNode, name || "material", density);
+    }
   }
 
   tool.UpdateAssemblies();
@@ -119,6 +185,7 @@ export function exportSTEP(
   writer.SetColorMode(true);
   writer.SetLayerMode(true);
   writer.SetNameMode(true);
+  writer.SetMaterialMode(true);
   oc.Interface_Static.SetIVal("write.surfacecurve.mode", 1);
   oc.Interface_Static.SetIVal("write.precision.mode", 0);
   oc.Interface_Static.SetIVal("write.step.assembly", 2);
