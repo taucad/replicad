@@ -43,10 +43,13 @@ import {
   type FaceUVBounds,
 } from "./shapeFunctions/faceGeometry.js";
 import {
+  cutAllShapes,
   cutShape,
   cutShapeWithPlane,
   draftShape,
+  fuseAllShapes,
   fuseShapes,
+  intersectAllShapes,
   intersectShapes,
   shellShape,
   splitShape,
@@ -656,6 +659,23 @@ export class _3DShape<Type extends TopoDS_Shape>
   }
 
   /**
+   * Builds a new shape by fusing this shape with all provided shapes in one
+   * OCCT boolean operation.
+   *
+   * @category Shape Modifications
+   */
+  fuseAll(
+    others: readonly Shape3D[],
+    options: BooleanOperationOptions = {}
+  ): Shape3D {
+    if (others.length === 0) return this.clone().asShape3D();
+
+    const newShape = cast(fuseAllShapes(this.wrapped, others, options));
+    if (!isShape3D(newShape)) throw new Error("Could not fuse as a 3d shape");
+    return newShape;
+  }
+
+  /**
    * Builds a new shape by removing the tool tape from this shape
    *
    * @category Shape Modifications
@@ -667,12 +687,48 @@ export class _3DShape<Type extends TopoDS_Shape>
   }
 
   /**
+   * Builds a new shape by removing all provided tool shapes in one OCCT
+   * boolean operation.
+   *
+   * @category Shape Modifications
+   */
+  cutAll(
+    tools: readonly Shape3D[],
+    options: BooleanOperationOptions = {}
+  ): Shape3D {
+    if (tools.length === 0) return this.clone().asShape3D();
+
+    const newShape = cast(cutAllShapes(this.wrapped, tools, options));
+    if (!isShape3D(newShape)) throw new Error("Could not cut as a 3d shape");
+    return newShape;
+  }
+
+  /**
    * Builds a new shape by intersecting this shape and another
    *
    * @category Shape Modifications
    */
-  intersect(tool: AnyShape): Shape3D {
-    const newShape = cast(intersectShapes(this.wrapped, tool.wrapped));
+  intersect(tool: AnyShape, options: BooleanOperationOptions = {}): Shape3D {
+    const newShape = cast(intersectShapes(this.wrapped, tool.wrapped, options));
+    if (!isShape3D(newShape))
+      throw new Error("Could not intersect as a 3d shape");
+    return newShape;
+  }
+
+  /**
+   * Builds a new shape by intersecting this shape with all provided shapes in
+   * one OCCT boolean operation.
+   *
+   * @category Shape Modifications
+   */
+  intersectAll(
+    tools: readonly AnyShape[],
+    options: BooleanOperationOptions = {}
+  ): Shape3D {
+    if (tools.length === 0)
+      throw new Error("Cannot intersect with an empty shape list");
+
+    const newShape = cast(intersectAllShapes(this.wrapped, tools, options));
     if (!isShape3D(newShape))
       throw new Error("Could not intersect as a 3d shape");
     return newShape;

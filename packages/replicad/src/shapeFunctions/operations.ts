@@ -1,4 +1,5 @@
 import type {
+  NCollection_List_TopoDS_Shape,
   TopoDS_Compound,
   TopoDS_Face,
   TopoDS_Shape,
@@ -60,12 +61,147 @@ const configureGlue = (
   }
 };
 
+type BooleanOperation = "fuse" | "cut" | "common";
+
+interface BooleanBatchResult {
+  Shape(): TopoDS_Shape;
+  IsDone(): boolean;
+  HasErrors(): boolean;
+  Errors(): string;
+  delete(): void;
+}
+
+/**
+ * The `ReplicadBooleanBatch` binding of Tau's native OpenCascade build. It runs
+ * a whole boolean (one argument against many tools) in a single OCCT call.
+ */
+interface BooleanBatchApi {
+  Fuse(
+    shapes: NCollection_List_TopoDS_Shape,
+    nonDestructive: boolean,
+    glue: number,
+    simplify: boolean,
+    angularTolerance: number,
+    fuzzyValue: number
+  ): BooleanBatchResult;
+  Cut(
+    argumentsList: NCollection_List_TopoDS_Shape,
+    toolsList: NCollection_List_TopoDS_Shape,
+    nonDestructive: boolean,
+    glue: number,
+    simplify: boolean,
+    angularTolerance: number,
+    fuzzyValue: number
+  ): BooleanBatchResult;
+  Common(
+    shapes: NCollection_List_TopoDS_Shape,
+    nonDestructive: boolean,
+    glue: number,
+    simplify: boolean,
+    angularTolerance: number,
+    fuzzyValue: number
+  ): BooleanBatchResult;
+}
+
+const getBooleanBatch = (): BooleanBatchApi | undefined =>
+  (getOC() as { ReplicadBooleanBatch?: BooleanBatchApi }).ReplicadBooleanBatch;
+
+const glueOption = (
+  optimisation: BooleanOperationOptions["optimisation"]
+): number => {
+  if (optimisation === "commonFace") return 1;
+  if (optimisation === "sameFace") return 2;
+  return 0;
+};
+
+const makeNCollection_List_TopoDS_Shape = (shapes: readonly TopoDS_Shape[]): NCollection_List_TopoDS_Shape => {
+  const oc = getOC();
+  const list = new oc.NCollection_List_TopoDS_Shape();
+  for (const shape of shapes) list.Append(shape);
+  return list;
+};
+
+const runBooleanBatch = (
+  batch: BooleanBatchApi,
+  operation: BooleanOperation,
+  argumentShapes: readonly TopoDS_Shape[],
+  toolShapes: readonly TopoDS_Shape[],
+  { optimisation = "none" }: BooleanOperationOptions = {}
+): TopoDS_Shape => {
+  const argumentsList = makeNCollection_List_TopoDS_Shape(argumentShapes);
+  const toolsList = makeNCollection_List_TopoDS_Shape(toolShapes);
+  const allShapesList = makeNCollection_List_TopoDS_Shape([...argumentShapes, ...toolShapes]);
+
+  try {
+    const glue = glueOption(optimisation);
+    const result =
+      operation === "fuse"
+        ? batch.Fuse(allShapesList, false, glue, true, 1e-3, 0)
+        : operation === "cut"
+        ? batch.Cut(argumentsList, toolsList, false, glue, true, 1e-3, 0)
+        : batch.Common(allShapesList, false, glue, true, 1e-3, 0);
+
+    try {
+      if (!result.IsDone() || result.HasErrors()) {
+        throw new Error(result.Errors() || `Could not ${operation} shapes`);
+      }
+      return result.Shape();
+    } finally {
+      result.delete();
+    }
+  } finally {
+    allShapesList.delete();
+    toolsList.delete();
+    argumentsList.delete();
+  }
+};
+
+/**
+ * Fuses or cuts one shape with several tools in one OCCT boolean, without the
+ * native batch binding.
+ */
+const runBuilderBoolean = (
+  operation: "fuse" | "cut",
+  shape: TopoDS_Shape,
+  tools: readonly TopoDS_Shape[],
+  optimisation: BooleanOperationOptions["optimisation"]
+): TopoDS_Shape => {
+  const oc = getOC();
+  const r = GCWithScope();
+  const builder = r(
+    operation === "fuse" ? new oc.BRepAlgoAPI_Fuse() : new oc.BRepAlgoAPI_Cut()
+  );
+  const argumentsList = r(makeNCollection_List_TopoDS_Shape([shape]));
+  const toolsList = r(makeNCollection_List_TopoDS_Shape(tools));
+
+  builder.SetArguments(argumentsList);
+  builder.SetTools(toolsList);
+  configureGlue(builder, optimisation);
+  builder.Build();
+  builder.SimplifyResult(true, true, 1e-3);
+  return builder.Shape();
+};
+
+const unwrapTools = (tools: Iterable<ShapeInput>): TopoDS_Shape[] =>
+  Array.from(tools, (tool) => unwrapShape(tool));
+
 /** Builds a raw shape by fusing two shapes. */
 export function fuseShapes(
   leftInput: ShapeInput,
   rightInput: ShapeInput,
   { optimisation = "none" }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
+  const batch = getBooleanBatch();
+  if (batch) {
+    return runBooleanBatch(
+      batch,
+      "fuse",
+      [unwrapShape(leftInput)],
+      [unwrapShape(rightInput)],
+      { optimisation }
+    );
+  }
+
   const oc = getOC();
   const r = GCWithScope();
   const builder = r(
@@ -78,12 +214,43 @@ export function fuseShapes(
   return builder.Shape();
 }
 
+/**
+ * Builds a raw shape by fusing a shape with all the provided shapes in one
+ * boolean operation.
+ */
+export function fuseAllShapes(
+  shapeInput: ShapeInput,
+  othersInput: Iterable<ShapeInput>,
+  { optimisation = "none" }: BooleanOperationOptions = {}
+): TopoDS_Shape {
+  const shape = unwrapShape(shapeInput);
+  const others = unwrapTools(othersInput);
+  if (others.length === 0) throw new Error("Cannot fuse an empty shape list");
+
+  const batch = getBooleanBatch();
+  if (batch) {
+    return runBooleanBatch(batch, "fuse", [shape], others, { optimisation });
+  }
+  return runBuilderBoolean("fuse", shape, others, optimisation);
+}
+
 /** Builds a raw shape by cutting a tool shape from another shape. */
 export function cutShape(
   shapeInput: ShapeInput,
   toolInput: ShapeInput,
   { optimisation = "none" }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
+  const batch = getBooleanBatch();
+  if (batch) {
+    return runBooleanBatch(
+      batch,
+      "cut",
+      [unwrapShape(shapeInput)],
+      [unwrapShape(toolInput)],
+      { optimisation }
+    );
+  }
+
   const oc = getOC();
   const r = GCWithScope();
   const builder = r(
@@ -96,20 +263,82 @@ export function cutShape(
   return builder.Shape();
 }
 
+/**
+ * Builds a raw shape by removing all the provided tool shapes from a shape in
+ * one boolean operation.
+ */
+export function cutAllShapes(
+  shapeInput: ShapeInput,
+  toolsInput: Iterable<ShapeInput>,
+  { optimisation = "none" }: BooleanOperationOptions = {}
+): TopoDS_Shape {
+  const shape = unwrapShape(shapeInput);
+  const tools = unwrapTools(toolsInput);
+  if (tools.length === 0) throw new Error("Cannot cut an empty shape list");
+
+  const batch = getBooleanBatch();
+  if (batch) {
+    return runBooleanBatch(batch, "cut", [shape], tools, { optimisation });
+  }
+  return runBuilderBoolean("cut", shape, tools, optimisation);
+}
+
 /** Builds a raw shape containing the intersection of two shapes. */
 export function intersectShapes(
   leftInput: ShapeInput,
-  rightInput: ShapeInput
+  rightInput: ShapeInput,
+  { optimisation = "none" }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
+  const batch = getBooleanBatch();
+  if (batch) {
+    return runBooleanBatch(
+      batch,
+      "common",
+      [unwrapShape(leftInput)],
+      [unwrapShape(rightInput)],
+      { optimisation }
+    );
+  }
+
   const oc = getOC();
   const r = GCWithScope();
   const builder = r(
     new oc.BRepAlgoAPI_Common(unwrapShape(leftInput), unwrapShape(rightInput))
   );
 
+  configureGlue(builder, optimisation);
   builder.Build();
   builder.SimplifyResult(true, true, 1e-3);
   return builder.Shape();
+}
+
+/**
+ * Builds a raw shape containing the intersection of a shape with every one of
+ * the provided shapes.
+ *
+ * With the native batch binding this runs as one boolean operation; otherwise
+ * the shapes are intersected one after the other.
+ */
+export function intersectAllShapes(
+  shapeInput: ShapeInput,
+  toolsInput: Iterable<ShapeInput>,
+  options: BooleanOperationOptions = {}
+): TopoDS_Shape {
+  const shape = unwrapShape(shapeInput);
+  const tools = unwrapTools(toolsInput);
+  if (tools.length === 0)
+    throw new Error("Cannot intersect with an empty shape list");
+
+  const batch = getBooleanBatch();
+  if (batch) return runBooleanBatch(batch, "common", [shape], tools, options);
+
+  let result = intersectShapes(shape, tools[0], options);
+  for (const tool of tools.slice(1)) {
+    const previous = result;
+    result = intersectShapes(previous, tool, options);
+    previous.delete();
+  }
+  return result;
 }
 
 const signedDistanceToPlane = (point: SimplePoint, plane: Plane): number =>
