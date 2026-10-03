@@ -57,7 +57,7 @@ export function curveTangentAt(curveInput: CurveInput, position = 0.5): Vector {
 export class Curve extends WrappingObj<CurveLike> {
   get repr(): string {
     const { startPoint, endPoint } = this;
-    const retVal = `start: (${this.startPoint.repr}) end:(${this.endPoint.repr}}`;
+    const retVal = `start: (${startPoint.repr}) end:(${endPoint.repr})`;
     startPoint.delete();
     endPoint.delete();
     return retVal;
