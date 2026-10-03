@@ -2,7 +2,7 @@ import { WrappingObj, GCWithScope } from "./register.js";
 import { DEG2RAD, RAD2DEG } from "./constants.js";
 import { getOC } from "./oclib.js";
 
-import {
+import type {
   gp_Ax1,
   gp_Ax2,
   gp_Ax3,

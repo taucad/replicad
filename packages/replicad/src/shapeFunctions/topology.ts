@@ -1,4 +1,4 @@
-import {
+import type {
   OpenCascadeInstance,
   TopAbs_ShapeEnum,
   TopoDS_Compound,

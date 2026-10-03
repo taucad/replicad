@@ -10,7 +10,7 @@ import {
   SplineConfig,
   GenericSketcher,
 } from "./sketcherlib";
-import {
+import type {
   Geom2d_Curve,
   Geom_Surface,
 } from "replicad-opencascadejs";

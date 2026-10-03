@@ -1,4 +1,4 @@
-import { Geom2dAdaptor_Curve, gp_Pnt2d } from "replicad-opencascadejs";
+import type { Geom2dAdaptor_Curve, gp_Pnt2d } from "replicad-opencascadejs";
 import { RAD2DEG } from "../constants";
 import { findCurveType } from "../definitionMaps";
 import { getOC } from "../oclib";

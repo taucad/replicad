@@ -14,7 +14,7 @@ import { makeLine, makeHelix, assembleWire, makeVertex } from "./shapeHelpers";
 import { localGC } from "./register";
 import { Direction, Vector, makeAx1, Point } from "./geom";
 import { DEG2RAD } from "./constants";
-import {
+import type {
   Law_Function,
   Law_Linear,
   Law_S,

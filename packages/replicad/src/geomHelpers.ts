@@ -8,7 +8,7 @@ import {
   Vector,
 } from "./geom";
 import { Point2D } from "./lib2d";
-import { TopoDS_Shape } from "replicad-opencascadejs";
+import type { TopoDS_Shape } from "replicad-opencascadejs";
 
 export interface PlaneFace {
   pointOnSurface(u: number, v: number): Vector;

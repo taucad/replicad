@@ -23,7 +23,7 @@ import {
 import { getOC } from "./oclib.js";
 import { GCWithScope, localGC, WrappingObj } from "./register.js";
 import zip from "./utils/zip";
-import {
+import type {
   GeomAPI_PointsToBSpline,
   gp_GTrsf,
   gp_Pnt,

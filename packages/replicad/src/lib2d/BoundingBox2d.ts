@@ -1,6 +1,6 @@
 import { WrappingObj, GCWithScope } from "../register.js";
 import { getOC } from "../oclib.js";
-import { Bnd_Box2d } from "replicad-opencascadejs";
+import type { Bnd_Box2d } from "replicad-opencascadejs";
 
 import { Point2D } from "./definitions.js";
 import { reprPnt } from "./utils.js";

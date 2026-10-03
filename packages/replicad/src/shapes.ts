@@ -66,7 +66,7 @@ import {
 import { downcast, iterTopo, shapeType } from "./shapeFunctions/topology.js";
 import { makeCaster } from "./shapeFunctions/casting.js";
 
-import {
+import type {
   TopoDS_Face,
   TopoDS_Shape,
   TopoDS_Edge,
