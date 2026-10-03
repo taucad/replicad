@@ -52,7 +52,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "vite build && REPLICAD_UMD=true vite build",
+    "build": "vite build && REPLICAD_SHAPE_FUNCTIONS=true vite build && REPLICAD_UMD=true vite build",
     "start": "vite build --watch",
     "build-doc": "typedoc --exclude \"../replicad-opencascadejs/*\" --out docs --theme default src",
     "build-docss": "typedoc --help",
