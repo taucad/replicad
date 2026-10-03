@@ -12,6 +12,7 @@ import {
   TopoDS_Wire,
 } from "replicad-opencascadejs";
 
+import { HASH_CODE_MAX } from "../constants.js";
 import { getOC } from "../oclib.js";
 
 const TOPOLOGY_KINDS = [
@@ -25,7 +26,7 @@ const TOPOLOGY_KINDS = [
   "compound",
 ] as const;
 
-export type TopologyKind = (typeof TOPOLOGY_KINDS)[number];
+export type TopologyKind = typeof TOPOLOGY_KINDS[number];
 export type TopoEntity = TopologyKind | "shape";
 
 export interface TopologyMap {
@@ -113,12 +114,16 @@ export function* iterTopo<Entity extends TopoEntity>(
   const oc = getOC();
   const explorer = new oc.TopExp_Explorer(shape, asTopo(topo), asTopo("shape"));
   try {
-    const seen: TopoDS_Shape[] = [];
+    // Bucket the already yielded shapes by hash so that deduplication stays
+    // linear: IsSame is only called against the (rare) hash collisions.
+    const seen = new Map<number, TopoDS_Shape[]>();
     while (explorer.More()) {
       const item = explorer.Current();
-      const isDuplicate = seen.some((s) => s.IsSame(item));
-      if (!isDuplicate) {
-        seen.push(item);
+      const hash = oc.ReplicadShapeHasher.HashCode(item, HASH_CODE_MAX);
+      const collisions = seen.get(hash);
+      if (!collisions?.some((candidate) => candidate.IsSame(item))) {
+        if (collisions) collisions.push(item);
+        else seen.set(hash, [item]);
         yield downcastTo(item, topo);
       }
       explorer.Next();
