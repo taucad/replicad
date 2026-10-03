@@ -19,7 +19,7 @@ import {
   GenericSketcher,
 } from "./sketcherlib.js";
 import { CurveLike, Edge, Wire } from "./shapes.js";
-import { Geom_BezierCurve } from "replicad-opencascadejs";
+import type { Geom_BezierCurve } from "replicad-opencascadejs";
 import Sketch from "./sketches/Sketch.js";
 
 /**

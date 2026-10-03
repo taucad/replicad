@@ -1,5 +1,6 @@
 import { expose } from "comlink";
 import * as replicad from "replicad";
+import * as replicadShapeFns from "replicad/shape-functions";
 import { createBuilder } from "replicad-evaluator/builder";
 import { createBrowserCodeEvaluator } from "replicad-evaluator/evaluate/browser";
 import { getManifoldModule, setWasmUrl } from "manifold-3d/lib/wasm.js";
@@ -8,6 +9,7 @@ import manifoldWasmUrl from "manifold-3d/manifold.wasm?url";
 import initOpenCascade from "./initOCSingle.js";
 
 self.replicad = replicad;
+self.replicadShapeFns = replicadShapeFns;
 
 let manifoldModulePromise = null;
 
@@ -40,6 +42,7 @@ const evaluator = createBuilder({
     const [oc, manifold] = await Promise.all([OC, MANIFOLD]);
     return {
       replicad,
+      shapeFns: replicadShapeFns,
       oc,
       manifold,
       fontPath: "/fonts/HKGrotesk-Regular.ttf",
@@ -49,7 +52,13 @@ const evaluator = createBuilder({
 
 const service = {
   ready: () => ensureReplicadReady().then(() => true),
-  buildShapesFromCode: (...args) => evaluator.buildShapesFromCode(...args),
+  buildShapesFromCodeWithMetadata: async (...args) => {
+    const shapes = await evaluator.buildShapesFromCode(...args);
+    return {
+      shapes,
+      compatibilityReplacements: evaluator.getCompatibilityReplacements(),
+    };
+  },
   loadFont: (...args) => evaluator.loadFont(...args),
   computeLabels: (...args) => evaluator.computeLabels(...args),
   extractDefaultParamsFromCode: (...args) =>

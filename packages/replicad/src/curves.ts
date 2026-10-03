@@ -1,4 +1,4 @@
-import { gp_GTrsf2d, Geom_Surface } from "replicad-opencascadejs";
+import type { gp_GTrsf2d, Geom_Surface } from "replicad-opencascadejs";
 
 import { GCWithScope, localGC, WrappingObj } from "./register";
 import type { Deletable } from "./register";

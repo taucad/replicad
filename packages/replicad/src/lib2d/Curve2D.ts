@@ -1,4 +1,4 @@
-import {
+import type {
   Geom2dAdaptor_Curve,
   Geom2d_Curve,
 } from "replicad-opencascadejs";

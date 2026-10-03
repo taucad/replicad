@@ -1,7 +1,7 @@
 import { Point } from "../geom.js";
 import { compoundShapes } from "../shapeHelpers.js";
 import { ExtrusionProfile } from "../addThickness.js";
-import { AnyShape } from "../shapes.js";
+import { AnyShape, Shape3D } from "../shapes.js";
 
 import CompoundSketch from "./CompoundSketch";
 import Sketch from "./Sketch";
@@ -43,21 +43,21 @@ export default class Sketches {
       twistAngle?: number;
       origin?: Point;
     } = {}
-  ): AnyShape {
+  ): Shape3D {
     const extruded = this.sketches.map((s) =>
       s.extrude(extrusionDistance, extrusionConfig)
     );
 
-    return compoundShapes(extruded);
+    return compoundShapes(extruded).asShape3D();
   }
 
   /**
    * Revolves the drawing on an axis (defined by its direction and an origin
    * (defaults to the sketch origin)
    */
-  revolve(revolutionAxis?: Point, config?: { origin?: Point; angle?: number }): AnyShape {
+  revolve(revolutionAxis?: Point, config?: { origin?: Point; angle?: number }): Shape3D {
     return compoundShapes(
       this.sketches.map((s) => s.revolve(revolutionAxis, config))
-    );
+    ).asShape3D();
   }
 }

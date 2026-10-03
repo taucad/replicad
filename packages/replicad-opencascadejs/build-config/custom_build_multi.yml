@@ -155,6 +155,7 @@ mainBuild:
   - symbol: Law_S
   - symbol: BRepAlgoAPI_Algo
   - symbol: BRepAlgoAPI_BuilderAlgo
+  - symbol: BRepAlgoAPI_Splitter
   - symbol: BRepAlgoAPI_BooleanOperation
   - symbol: BRepAlgoAPI_Cut
   - symbol: BRepAlgoAPI_Fuse
@@ -179,6 +180,7 @@ mainBuild:
   - symbol: BRepPrimAPI_MakeOneAxis
   - symbol: BRepPrimAPI_MakeCylinder
   - symbol: BRepPrimAPI_MakeBox
+  - symbol: BRepPrimAPI_MakeHalfSpace
   - symbol: BRepCheck_Analyzer
   - symbol: BRepPrimAPI_MakeSweep
   - symbol: BRepPrimAPI_MakePrism

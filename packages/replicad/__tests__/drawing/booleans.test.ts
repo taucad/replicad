@@ -94,7 +94,10 @@ test.each([5, 11, 13])(
     const fused = fuseAll(copies);
 
     expect(fused.toSVG()).toMatchSVGSnapshot();
-  }
+  },
+  // These pure 2D boolean chains take seconds; keep them from timing out when
+  // the suite runs its files in parallel on a busy machine.
+  30_000
 );
 
 const triangles: [Point2D, Point2D, Point2D][] = [
@@ -722,4 +725,4 @@ test("build from triangles", () => {
 
   const fused = fuseAll(drawings);
   expect(fused.toSVG()).toMatchSVGSnapshot();
-});
+}, 30_000);

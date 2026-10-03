@@ -1,0 +1,46 @@
+name: "CI"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm prepare-packages
+
+      # Runs after the build: replicad-evaluator and replicad-cli resolve
+      # replicad through its published entry points, so they need dist/.
+      - name: Run the tests
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build the studio
+        run: pnpm --filter studio build
+
+      - name: Build the example app
+        run: pnpm --filter replicad-app-example build

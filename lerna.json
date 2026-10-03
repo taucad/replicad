@@ -1,6 +1,6 @@
 {
   "npmClient": "pnpm",
-  "version": "0.23.4",
+  "version": "1.1.0-taulabs.0",
   "packages": ["packages/*"],
   "$schema": "node_modules/lerna/schemas/lerna-schema.json"
 }

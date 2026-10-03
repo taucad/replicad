@@ -12,9 +12,9 @@ import {
 } from "./shapes";
 import { makeLine, makeHelix, assembleWire, makeVertex } from "./shapeHelpers";
 import { localGC } from "./register";
-import { Vector, makeAx1, Point } from "./geom";
+import { Direction, Vector, makeAx1, Point } from "./geom";
 import { DEG2RAD } from "./constants";
-import {
+import type {
   Law_Function,
   Law_Linear,
   Law_S,
@@ -37,7 +37,7 @@ export const basicFaceExtrusion = (face: Face, extrusionVec: Vector): Solid => {
 export const revolution = (
   face: Face,
   center: Point = [0, 0, 0],
-  direction: Point = [0, 0, 1],
+  direction: Direction = [0, 0, 1],
   angle = 360
 ): Shape3D => {
   const oc = getOC();

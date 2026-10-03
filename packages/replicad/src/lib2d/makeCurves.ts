@@ -1,4 +1,4 @@
-import { Geom2dAPI_PointsToBSpline } from "replicad-opencascadejs";
+import type { Geom2dAPI_PointsToBSpline } from "replicad-opencascadejs";
 import { getOC } from "../oclib.js";
 import { GCWithScope, localGC } from "../register.js";
 

@@ -1,4 +1,4 @@
-import { Geom2dAPI_InterCurveCurve } from "replicad-opencascadejs";
+import type { Geom2dAPI_InterCurveCurve } from "replicad-opencascadejs";
 import { getOC } from "../oclib";
 import { Curve2D } from "./Curve2D";
 import { Point2D } from "./definitions";

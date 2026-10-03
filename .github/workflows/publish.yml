@@ -1,0 +1,56 @@
+name: "Publish"
+
+# Publishes one workspace package to npm under the @taulabs scope. Runs only
+# by hand from main, so every release is a deliberate choice.
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Workspace package to publish"
+        required: true
+        default: "@taulabs/replicad"
+        type: choice
+        options:
+          - "@taulabs/replicad"
+      tag:
+        description: "npm dist-tag"
+        required: true
+        default: "latest"
+        type: string
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm prepare-packages
+
+      - name: Test
+        run: pnpm --filter "${{ inputs.package }}" test
+
+      - name: Publish
+        run: pnpm --filter "${{ inputs.package }}" publish --access public --no-git-checks --provenance --tag "$NPM_TAG"
+        env:
+          NPM_TAG: ${{ inputs.tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
