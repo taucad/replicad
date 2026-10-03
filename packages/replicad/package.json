@@ -56,7 +56,7 @@
     "start": "vite build --watch",
     "build-doc": "typedoc --exclude \"../replicad-opencascadejs/*\" --out docs --theme default src",
     "build-docss": "typedoc --help",
-    "test": "vitest",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

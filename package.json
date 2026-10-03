@@ -9,7 +9,7 @@
   "scripts": {
     "prepare-packages": "lerna exec --ignore @taulabs/replicad-opencascadejs --no-private --no-bail -- pnpm run build",
     "publish-packages": "lerna publish",
-    "test": "pnpm -r --if-present test --run",
+    "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
