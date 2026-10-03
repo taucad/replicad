@@ -2,13 +2,14 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 
 import styled from "styled-components";
 import { useParams } from "react-router-dom";
-import axios from "axios";
 
 import builderAPI from "./utils/builderAPI";
+import fetchCode from "./utils/fetchCode";
 import loadCode from "./utils/loadCode";
 import saveShape from "./utils/saveShape";
 
 import StandardUI from "./components/StandardUI.jsx";
+import CompatibilityNotice from "./components/CompatibilityNotice.jsx";
 import { LinkEditor } from "./components/LinkEditor.jsx";
 
 const CenterInfo = styled.div`
@@ -63,8 +64,7 @@ const useCode = (readyToBuild, setError) => {
 
     async function loadCodeFromUrl() {
       try {
-        const response = await axios.get(codeUrl);
-        setCode(response.data);
+        setCode(await fetchCode(codeUrl));
         readyToBuild.current = true;
       } catch (e) {
         console.error(e);
@@ -125,6 +125,7 @@ export default function LinkWidget() {
   const [computedShapes, updateComputedShapes] = useState([]);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [compatibilityWarning, setCompatibilityWarning] = useState(null);
 
   const [labels, setLabels] = useState([]);
 
@@ -153,28 +154,43 @@ export default function LinkWidget() {
       paramsToCompute.current = null;
       updateComputedShapes(null);
       setDefaultParams(null);
+      setCompatibilityWarning(null);
     };
   }, [code]);
 
   const build = useCallback(
     (buildParams) => {
+      if (!code) return;
       setIsLoading(true);
       builderAPI
         .ready()
         .then(() => {
           readyToBuild.current = false;
-          return builderAPI.buildShapesFromCode(code, buildParams);
+          return builderAPI.buildShapesFromCodeWithMetadata(code, buildParams);
         })
-        .then((geometry) => {
-          updateComputedShapes(geometry);
-          setGeometryHasBeenComputed(true);
-          readyToBuild.current = true;
-          setIsLoading(false);
-          if (paramsToCompute.current) {
-            build({ ...paramsToCompute.current });
-            paramsToCompute.current = null;
+        .then(
+          ({ shapes: geometry, compatibilityReplacements: replacements }) => {
+            setCompatibilityWarning(
+              replacements.length
+                ? `This model uses an older OpenCascade API (${replacements
+                    .map(
+                      ({ legacy, replacement }) => `${legacy} → ${replacement}`
+                    )
+                    .join(
+                      ", "
+                    )}). Its author should update the code to use the unnumbered API names.`
+                : null
+            );
+            updateComputedShapes(geometry);
+            setGeometryHasBeenComputed(true);
+            readyToBuild.current = true;
+            setIsLoading(false);
+            if (paramsToCompute.current) {
+              build({ ...paramsToCompute.current });
+              paramsToCompute.current = null;
+            }
           }
-        })
+        )
         .then(() => {
           return builderAPI.computeLabels(code, buildParams);
         })
@@ -197,8 +213,8 @@ export default function LinkWidget() {
   );
 
   useEffect(() => {
-    build();
-  }, [build]);
+    if (code) build();
+  }, [build, code]);
 
   const loadFont = useCallback(
     async (fontData, fontName, forceUpdate) => {
@@ -298,6 +314,7 @@ export default function LinkWidget() {
         onSave={(format) => saveShape("defaultShape", format, code)}
         canSave={geometryHasBeenComputed}
       />
+      <CompatibilityNotice message={compatibilityWarning} />
       <AdditionalInfo>
         <a href="https://replicad.xyz" target="_blank">
           {" replicad "}

@@ -3,15 +3,20 @@ import {
   Plane,
   PlaneName,
   Point,
+  Direction,
   Transformation,
   Vector,
 } from "./geom";
-import { Face } from "./shapes";
 import { Point2D } from "./lib2d";
 import { TopoDS_Shape } from "replicad-opencascadejs";
 
+export interface PlaneFace {
+  pointOnSurface(u: number, v: number): Vector;
+  normalAt(point: Point): Vector;
+}
+
 export const makePlaneFromFace = (
-  face: Face,
+  face: PlaneFace,
   originOnSurface: Point2D = [0, 0]
 ): Plane => {
   const originPoint = face.pointOnSurface(...originOnSurface);
@@ -48,7 +53,7 @@ export function rotate(
   shape: TopoDS_Shape,
   angle: number,
   position: Point = [0, 0, 0],
-  direction: Point = [0, 0, 1]
+  direction: Direction = [0, 0, 1]
 ): TopoDS_Shape {
   const transformation = new Transformation();
   transformation.rotate(angle, position, direction);

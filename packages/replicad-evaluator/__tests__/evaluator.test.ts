@@ -1,10 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
 import * as replicad from "../../replicad/src/index";
+import * as shapeFns from "../../replicad/src/shapeFunctions/index";
 import { createEvaluator } from "../src/index";
 
 const createTestEvaluator = () =>
   createEvaluator({
     replicad,
+    shapeFns,
     oc: globalThis.replicadEvaluatorOC,
     tempDir: "/tmp",
   });
@@ -22,7 +24,10 @@ const main = ({ makeCylinder }, params) => {
 
     const defaultParams = await evaluator.extractDefaultParamsFromCode(code);
     const defaultName = await evaluator.extractDefaultNameFromCode(code);
-    const result = await evaluator.buildShapesFromCode(code, defaultParams || {});
+    const result = await evaluator.buildShapesFromCode(
+      code,
+      defaultParams || {}
+    );
     const stl = await evaluator.exportShape("stl");
 
     expect(defaultParams).toEqual({ radius: 7 });
@@ -85,7 +90,10 @@ export const labels = (params: Params) => [
 
     const defaultParams = await evaluator.extractDefaultParamsFromCode(code);
     const defaultName = await evaluator.extractDefaultNameFromCode(code);
-    const result = await evaluator.buildShapesFromCode(code, defaultParams || {});
+    const result = await evaluator.buildShapesFromCode(
+      code,
+      defaultParams || {}
+    );
     const labels = await evaluator.computeLabels(code, defaultParams || {});
     const stl = await evaluator.exportShape("stl");
 
@@ -111,7 +119,9 @@ const main = ({ makeCylinder }) => makeCylinder(3, 8);
 
   test("decodes WebAssembly exceptions from failed OCCT operations", async () => {
     const evaluator = createTestEvaluator();
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
 
     try {
       const result = await evaluator.buildShapesFromCode(
@@ -135,6 +145,127 @@ const main = ({ makeBaseBox }) => makeBaseBox(10, 10, 10).fillet(100);
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  test("temporarily restores and reports numbered OpenCascade APIs", async () => {
+    const evaluator = createTestEvaluator();
+    const result = await evaluator.buildShapesFromCode(
+      `
+const main = ({ makeCylinder }) => {
+  const shape = makeCylinder(3, 8);
+  const progress = new oc.Message_ProgressRange_1();
+  oc.BinTools.Write_3(shape._wrapped, "compatibility-test.brep", progress);
+  return shape;
+};
+      `,
+      {}
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(evaluator.getCompatibilityReplacements()).toEqual([
+      {
+        legacy: "oc.Message_ProgressRange_1",
+        replacement: "oc.Message_ProgressRange",
+      },
+      {
+        legacy: "oc.BinTools.Write_3",
+        replacement: "oc.BinTools.Write",
+      },
+    ]);
+    expect(
+      globalThis.replicadEvaluatorOC.Message_ProgressRange_1
+    ).toBeUndefined();
+    expect(globalThis.replicadEvaluatorOC.BinTools.Write_3).toBeUndefined();
+
+    await evaluator.buildShapesFromCode(
+      `const main = ({ makeCylinder }) => makeCylinder(2, 4);`,
+      {}
+    );
+    expect(evaluator.getCompatibilityReplacements()).toEqual([]);
+  });
+
+  test("exposes the shape functions as a replicadShapeFns global", async () => {
+    const evaluator = createTestEvaluator();
+    const result = await evaluator.buildShapesFromCode(
+      `
+const main = ({ makeBaseBox }) => {
+  const box = makeBaseBox(10, 10, 10);
+  const edges = [...replicadShapeFns.iterTopo(box.wrapped, "edge")];
+  if (edges.length !== 12) throw new Error("expected 12 edges");
+  return box;
+};
+      `,
+      {}
+    );
+
+    expect(result[0].error).toBe(false);
+  });
+
+  test("resolves imports from replicad/shape-functions", async () => {
+    const evaluator = createTestEvaluator();
+    const code = `
+import { cast, makeBaseBox } from "replicad";
+import { cutShape, fuseShapes } from "replicad/shape-functions";
+import * as fns from "replicad/shape-functions";
+
+export const defaultName = "Shape Functions Box";
+
+export function main() {
+  const base = makeBaseBox(10, 10, 10);
+  const tool = makeBaseBox(4, 4, 20);
+
+  const cut = cutShape(base, tool);
+  const fused = fuseShapes(cut, makeBaseBox(2, 2, 30));
+
+  // The shape functions return raw topological shapes; \`cast\` brings them
+  // back into the class hierarchy.
+  if (fns.shapeType(fused) === undefined) throw new Error("no shape type");
+  return cast(fused);
+}
+    `;
+
+    const result = await evaluator.buildShapesFromCode(code, {});
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].error).toBe(false);
+    expect(result[0].mesh).toBeTruthy();
+  });
+
+  test("applies highlights registered through the $ helper", async () => {
+    const evaluator = createTestEvaluator();
+    const result = await evaluator.buildShapesFromCode(
+      `
+const main = ({ makeBaseBox }) => {
+  $.highlightEdge((e) => e.inPlane("XY", 0));
+  return makeBaseBox(10, 10, 10);
+};
+      `,
+      {}
+    );
+
+    expect(result[0].error).toBe(false);
+    // The four edges of the box sitting in the XY plane.
+    expect(result[0].highlight).toHaveLength(4);
+  });
+
+  test("does not let a $ helper highlight override a per-shape one", async () => {
+    const evaluator = createTestEvaluator();
+    const result = await evaluator.buildShapesFromCode(
+      `
+const main = ({ makeBaseBox, EdgeFinder }) => {
+  $.highlightEdge((e) => e.inPlane("XY", 0));
+  return {
+    shape: makeBaseBox(10, 10, 10),
+    highlight: new EdgeFinder().inPlane("XY", 10),
+  };
+};
+      `,
+      {}
+    );
+
+    expect(result[0].error).toBe(false);
+    // The shape's own finder wins: the four edges on the opposite face.
+    expect(result[0].highlight).toHaveLength(4);
   });
 
   test("renders curved revolutions without remeshing edges more finely", async () => {

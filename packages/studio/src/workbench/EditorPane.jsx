@@ -4,7 +4,8 @@ import styled from "styled-components";
 import { observer } from "mobx-react";
 import Editor from "@monaco-editor/react";
 
-import replicadTypes from "../../node_modules/replicad/dist/replicad.d.ts?raw";
+import replicadTypes from "replicad/types?raw";
+import replicadShapeFnsTypes from "replicad/shape-functions/types?raw";
 
 import Splitter, { GutterTheme, SplitDirection } from "@devbookhq/splitter";
 
@@ -50,6 +51,14 @@ export const ErrorOverlay = styled.div`
   }
 `;
 
+const WarningOverlay = styled(ErrorOverlay)`
+  border-color: #d28b00;
+
+  & > :first-child {
+    color: #d28b00;
+  }
+`;
+
 export default observer(function EditorPane() {
   const store = useEditorStore();
   const editorRef = React.useRef(null);
@@ -66,10 +75,15 @@ export default observer(function EditorPane() {
         content: `declare module 'replicad' { ${replicadTypes} }`,
       },
       {
+        content: `declare module 'replicad/shape-functions' { ${replicadShapeFnsTypes} }`,
+      },
+      {
         content: `
   import * as replicadAll from 'replicad';
+  import * as replicadShapeFnsAll from 'replicad/shape-functions';
   declare global {
   declare var replicad = replicadAll;
+  declare var replicadShapeFns = replicadShapeFnsAll;
   }
 `,
       },
@@ -111,7 +125,9 @@ export default observer(function EditorPane() {
         direction={SplitDirection.Vertical}
         gutterTheme={GutterTheme.Dark}
         gutterClassName="custom-gutter-theme"
-        initialSizes={store.error ? [75, 25] : [100]}
+        initialSizes={
+          store.error || store.compatibilityWarning ? [75, 25] : [100]
+        }
       >
         <Editor
           defaultLanguage={language}
@@ -127,13 +143,21 @@ export default observer(function EditorPane() {
             minimap: { enabled: false },
           }}
         />
-        {store.error && (
+        {store.error ? (
           <ErrorOverlay>
             <div>Error</div>
             <div>{store.error?.message}</div>
             {store.error.stack && <pre>{store.error.stack}</pre>}
+            {store.compatibilityWarning && (
+              <div>{store.compatibilityWarning}</div>
+            )}
           </ErrorOverlay>
-        )}
+        ) : store.compatibilityWarning ? (
+          <WarningOverlay>
+            <div>Compatibility warning</div>
+            <div>{store.compatibilityWarning}</div>
+          </WarningOverlay>
+        ) : null}
       </Splitter>
     </>
   );

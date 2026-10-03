@@ -61,6 +61,7 @@ const AppState = types
     processing: false,
     shapeLoaded: false,
     error: false,
+    compatibilityWarning: null,
     faceInfo: null,
     processingInfo: null,
   }))
@@ -78,10 +79,18 @@ const AppState = types
       self.ui.deHighlight();
       self.processing = true;
       try {
-        const mesh = yield api.buildShapesFromCode(
-          self.currentValues.code,
-          params
-        );
+        const { shapes: mesh, compatibilityReplacements: replacements } =
+          yield api.buildShapesFromCodeWithMetadata(
+            self.currentValues.code,
+            params
+          );
+        self.compatibilityWarning = replacements.length
+          ? `OpenCascade compatibility mode was used (${replacements
+              .map(({ legacy, replacement }) => `${legacy} → ${replacement}`)
+              .join(
+                ", "
+              )}). Please update your code to use the unnumbered API names.`
+          : null;
 
         if (mesh.error) {
           self.error = mesh;
@@ -94,6 +103,7 @@ const AppState = types
       } catch (e) {
         console.error(e);
         self.error = e;
+        self.compatibilityWarning = null;
       }
 
       try {

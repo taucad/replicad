@@ -5,6 +5,7 @@ import { Command, Option } from "commander";
 import { getManifoldModule, setWasmUrl } from "manifold-3d/lib/wasm.js";
 import opencascadeModule from "replicad-opencascadejs";
 import * as replicad from "replicad";
+import * as replicadShapeFns from "replicad/shape-functions";
 import { createEvaluator } from "replicad-evaluator";
 import packageJson from "../package.json" with { type: "json" };
 import { saveBuildOutput } from "./saveOutput";
@@ -106,6 +107,7 @@ async function createCliEvaluator() {
 
   return createEvaluator({
     replicad,
+    shapeFns: replicadShapeFns,
     oc,
     manifold,
   });
@@ -128,6 +130,17 @@ async function runCli(argv: string[]) {
   const evaluator = await getEvaluator();
   const defaultParams = await evaluator.extractDefaultParamsFromCode(code);
   const buildResult = await evaluator.buildShapesFromCode(code, defaultParams || {});
+  const compatibilityReplacements = evaluator.getCompatibilityReplacements();
+
+  if (compatibilityReplacements.length) {
+    const aliases = compatibilityReplacements
+      .map(({ legacy, replacement }) => `${legacy} → ${replacement}`)
+      .join(", ");
+    process.stderr.write(
+      `OpenCascade compatibility mode was used (${aliases}). ` +
+        `Please update your code to use the unnumbered API names.\n`
+    );
+  }
 
   if (!Array.isArray(buildResult)) {
     throw new Error(buildResult?.message || "Failed to build shapes");

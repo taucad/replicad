@@ -7,12 +7,14 @@
   ],
   "license": "MIT",
   "scripts": {
-    "prepare-packages": "lerna exec pnpm build --no-private --no-bail",
-    "publish-packages": "lerna publish"
+    "prepare-packages": "lerna exec --ignore @taulabs/replicad-opencascadejs --no-private --no-bail -- pnpm run build",
+    "publish-packages": "lerna publish",
+    "test": "pnpm -r --if-present test -- --run",
+    "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "eslint": "^8.1.0",
-    "lerna": "7.1.5",
+    "lerna": "^10.0.0",
     "prettier": "^2.4.1"
   },
   "packageManager": "pnpm@9.13.2+sha512.88c9c3864450350e65a33587ab801acf946d7c814ed1134da4a924f6df5a2120fd36b46aab68f7cd1d413149112d53c7db3a4136624cfd00ff1846a0c6cef48a"

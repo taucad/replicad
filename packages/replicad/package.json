@@ -1,7 +1,7 @@
 {
-  "name": "replicad",
-  "version": "0.23.1",
-  "description": "The library to build browser based 3D models with code",
+  "name": "@taulabs/replicad",
+  "version": "1.1.0-taulabs.0",
+  "description": "The library to build browser based 3D models with code (Tau fork)",
   "keywords": [
     "cad",
     "opencascadejs",
@@ -10,7 +10,18 @@
     "STL"
   ],
   "author": "Steve Genoud <steve@sgenoud.com>",
-  "homepage": "https://replicad.xyz",
+  "contributors": [
+    "Tau Contributors"
+  ],
+  "homepage": "https://github.com/taucad/replicad/tree/main/packages/replicad",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/taucad/replicad.git",
+    "directory": "packages/replicad"
+  },
+  "bugs": {
+    "url": "https://github.com/taucad/replicad/issues"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/replicad.cjs",
@@ -18,9 +29,17 @@
   "types": "./dist/replicad.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/replicad.d.ts",
       "import": "./dist/replicad.js",
       "require": "./dist/replicad.umd.cjs"
-    }
+    },
+    "./shape-functions": {
+      "types": "./dist/shape-functions.d.ts",
+      "import": "./dist/shape-functions.js",
+      "require": "./dist/shape-functions.cjs"
+    },
+    "./shape-functions/types": "./dist/shape-functions.d.ts",
+    "./types": "./dist/replicad.d.ts"
   },
   "directories": {
     "src": "src",
@@ -29,42 +48,36 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "vite build",
-    "start": "NO_TYPES=true vite build --watch",
+    "build": "vite build && REPLICAD_UMD=true vite build",
+    "start": "vite build --watch",
     "build-doc": "typedoc --exclude \"../replicad-opencascadejs/*\" --out docs --theme default src",
     "build-docss": "typedoc --help",
     "test": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "24.0.1",
-    "@rollup/plugin-json": "6.0.0",
-    "@rollup/plugin-node-resolve": "15.0.1",
-    "@rollup/plugin-terser": "^0.4.3",
-    "@swc/core": "^1.3.27",
-    "@swc/helpers": "^0.4.14",
+    "@microsoft/api-extractor": "^7.58.12",
     "@types/flatbush": "^3.3.0",
     "@typescript-eslint/eslint-plugin": "^5.2.0",
     "@typescript-eslint/parser": "^5.4.0",
     "chalk": "^5.2.0",
     "eslint": "^8.1.0",
-    "jest-image-snapshot": "^6.1.0",
     "jest-matcher-utils": "^29.4.1",
-    "jest-svg-snapshot": "^0.1.0",
     "manifold-3d": "^3.0.1",
     "prettier": "^2.4.1",
-    "replicad-opencascadejs": "^0.23.0",
-    "rollup": "3.28.0",
-    "rollup-plugin-ts": "3.4.4",
+    "replicad-opencascadejs": "workspace:@taulabs/replicad-opencascadejs@^",
     "typedoc": "^0.28.2",
-    "typescript": "5.1.6",
-    "vite": "^4.0.4",
-    "vite-plugin-dts": "^3.5.2",
-    "vitest": "^0.28.3"
+    "typescript": "^5.9.3",
+    "vite": "^8.2.1",
+    "vite-plugin-dts": "^5.0.3",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@types/opentype.js": "1.3.4",
+    "@types/opentype.js": "^1.3.10",
     "flatbush": "^4.0.0",
     "opentype.js": "1.3.4"
   },
