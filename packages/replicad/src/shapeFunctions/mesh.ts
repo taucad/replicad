@@ -16,29 +16,32 @@ export interface FaceTriangulation {
 }
 
 export interface ShapeMesh {
-  triangles: number[];
-  vertices: number[];
-  normals: number[];
+  triangles: Uint32Array;
+  vertices: Float32Array;
+  normals: Float32Array;
   faceGroups: { start: number; count: number; faceId: number }[];
 }
 
 export interface ShapeEdgeMesh {
-  lines: number[];
+  lines: Float32Array;
   edgeGroups: { start: number; count: number; edgeId: number }[];
 }
 
 type MeshHeap = Float32Array | Uint32Array | Int32Array;
 
-const extractFromPointer = (
-  heap: MeshHeap,
+// Copies the extractor's buffer out of the heap in one step. A copy rather than
+// a view, so a later memory.grow() cannot detach it, and a typed array rather
+// than number[], which costs at least twice the bytes and is built per element.
+const extractFromPointer = <T extends MeshHeap>(
+  heap: T,
   pointer: number,
   size: number
-): number[] => {
+): T => {
   // The extractor exposes pointers as signed 32 bit integers. Above 2GiB of
   // heap they come back negative, so read them as unsigned byte offsets before
   // converting them to typed-array indexes.
   const start = (pointer >>> 0) / heap.BYTES_PER_ELEMENT;
-  return Array.from(heap.subarray(start, start + size));
+  return heap.slice(start, start + size) as T;
 };
 
 export function prepareShapeForMesh(

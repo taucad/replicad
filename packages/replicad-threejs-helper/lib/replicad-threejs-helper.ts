@@ -1,14 +1,19 @@
-import { BufferGeometry, Float32BufferAttribute, EdgesGeometry } from "three";
+import {
+  BufferGeometry,
+  Float32BufferAttribute,
+  EdgesGeometry,
+  Uint32BufferAttribute,
+} from "three";
 
 export interface ReplicadMeshedFaces {
-  vertices: number[];
-  triangles: number[];
-  normals?: number[];
+  vertices: ArrayLike<number>;
+  triangles: ArrayLike<number>;
+  normals?: ArrayLike<number>;
   faceGroups?: { start: number; count: number; faceId: number }[];
 }
 
 export interface ReplicadMeshedEdges {
-  lines: number[];
+  lines: ArrayLike<number>;
   edgeGroups?: { start: number; count: number; edgeId: number }[];
 }
 
@@ -65,7 +70,12 @@ export function syncFaces(
 ): void {
   faces.clearGroups();
   delete faces.userData.faceGroups;
-  faces.setIndex(replicadMesh.triangles);
+  // setIndex only converts plain arrays, so wrap typed arrays ourselves.
+  faces.setIndex(
+    Array.isArray(replicadMesh.triangles)
+      ? replicadMesh.triangles
+      : new Uint32BufferAttribute(replicadMesh.triangles, 1)
+  );
   faces.setAttribute(
     "position",
     new Float32BufferAttribute(replicadMesh.vertices, 3)
