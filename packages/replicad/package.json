@@ -1,6 +1,6 @@
 {
   "name": "@taulabs/replicad",
-  "version": "2.0.0-taulabs.0",
+  "version": "1.1.0-taulabs.1",
   "description": "The library to build browser based 3D models with code (Tau fork)",
   "keywords": [
     "cad",
