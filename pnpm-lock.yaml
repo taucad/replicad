@@ -29,7 +29,7 @@ importers:
         specifier: 1.3.4
         version: 1.3.4
       replicad-opencascadejs:
-        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.0
+        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.1
         version: link:../replicad-opencascadejs
     devDependencies:
       "@rollup/plugin-commonjs":
@@ -126,7 +126,7 @@ importers:
         specifier: workspace:@taulabs/replicad@^
         version: link:../replicad
       replicad-opencascadejs:
-        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.0
+        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.1
         version: link:../replicad-opencascadejs
       replicad-threejs-helper:
         specifier: ^0.23.0
@@ -160,7 +160,7 @@ importers:
         specifier: workspace:^
         version: link:../replicad-evaluator
       replicad-opencascadejs:
-        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.0
+        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.1
         version: link:../replicad-opencascadejs
       tsx:
         specifier: ^4.20.6
@@ -259,7 +259,7 @@ importers:
         specifier: workspace:@taulabs/replicad@^
         version: link:../replicad
       replicad-opencascadejs:
-        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.0
+        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.1
         version: link:../replicad-opencascadejs
       typescript:
         specifier: 5.1.6
@@ -277,8 +277,8 @@ importers:
   packages/replicad-opencascadejs:
     devDependencies:
       "@libcascade/toolchain":
-        specifier: 3.0.2
-        version: 3.0.2
+        specifier: 3.1.0
+        version: 3.1.0
       vitest:
         specifier: ^0.28.3
         version: 0.28.3(terser@5.38.1)
@@ -404,7 +404,7 @@ importers:
         specifier: workspace:^
         version: link:../replicad-evaluator
       replicad-opencascadejs:
-        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.0
+        specifier: workspace:@taulabs/replicad-opencascadejs@0.23.0-beta.1
         version: link:../replicad-opencascadejs
       replicad-threejs-helper:
         specifier: workspace:^
@@ -4472,10 +4472,10 @@ packages:
       }
     engines: { node: ^14.17.0 || >=16.0.0 }
 
-  "@libcascade/toolchain@3.0.2":
+  "@libcascade/toolchain@3.1.0":
     resolution:
       {
-        integrity: sha512-ko2ZS9vJ2xX6Rjc5+8NRyTL5Vr1COH6S3SyCHkxrUQpJ6BO1gVRH5N/3v/tLWIkXBsR+1WwCFLUVxJojWg+6Tg==,
+        integrity: sha512-zZBjsxLUUIP+A2d1LIHU22IUrNTv/XbFHzYfLLWpjifWnLA0bRvSuxgLTncDLOcNoDy7PKQdOobJ0U/wF8o7+g==,
       }
     engines: { node: ">=22" }
     hasBin: true
@@ -23615,7 +23615,7 @@ snapshots:
       - encoding
       - supports-color
 
-  "@libcascade/toolchain@3.0.2":
+  "@libcascade/toolchain@3.1.0":
     dependencies:
       jiti: 2.7.0
       yaml: 2.9.0

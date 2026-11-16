@@ -1,6 +1,6 @@
 {
   "name": "@taulabs/replicad-opencascadejs",
-  "version": "0.23.0-beta.0",
+  "version": "0.23.0-beta.1",
   "description": "OpencascadeJS custom build for replicad (Tau fork: SIMD without relaxed-simd, native WebAssembly exceptions)",
   "author": "Steve Genoud <steve@sgenoud.com>",
   "homepage": "",
@@ -83,7 +83,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@libcascade/toolchain": "3.0.2",
+    "@libcascade/toolchain": "3.1.0",
     "vitest": "^0.28.3"
   }
 }

@@ -10,11 +10,11 @@ import initSingle from "../dist/replicad_single.js";
 const require = createRequire(import.meta.url);
 // These calls deliberately exercise the package's CommonJS export conditions.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const initSingleCjs = require("replicad-opencascadejs");
+const initSingleCjs = require("@taulabs/replicad-opencascadejs");
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const initMultiCjs = require("replicad-opencascadejs/multi");
+const initMultiCjs = require("@taulabs/replicad-opencascadejs/multi");
 const packageRoot = dirname(
-  require.resolve("replicad-opencascadejs/package.json")
+  require.resolve("@taulabs/replicad-opencascadejs/package.json")
 );
 const packageExports = JSON.parse(
   readFileSync(join(packageRoot, "package.json"), "utf8")

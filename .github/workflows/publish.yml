@@ -1,0 +1,71 @@
+name: "Publish"
+
+# Publishes @taulabs/replicad-opencascadejs to npm through npm trusted
+# publishing (OIDC): no token is stored. The package's source of truth is this
+# branch, and its WASM is committed under dist/ (it is built locally with
+# `libcascade build`, which needs Docker), so the job only tests, packs and
+# publishes. Runs only by hand, so every release is a deliberate choice.
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Workspace package to publish"
+        required: true
+        default: "@taulabs/replicad-opencascadejs"
+        type: choice
+        options:
+          - "@taulabs/replicad-opencascadejs"
+      tag:
+        description: "npm dist-tag"
+        required: true
+        default: "beta"
+        type: string
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/native-kernel-extensions'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - name: Update npm
+        run: npm install --global npm@^11.5.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm --filter "${{ inputs.package }}" test
+
+      # pnpm pack rewrites workspace: ranges; npm publishes the tarball with an
+      # OIDC token and attaches provenance automatically.
+      - name: Pack
+        run: |
+          case "$PACKAGE" in
+            "@taulabs/replicad-opencascadejs") dir=packages/replicad-opencascadejs ;;
+            *) echo "no directory for $PACKAGE" >&2; exit 1 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/pack"
+          (cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP/pack")
+        env:
+          PACKAGE: ${{ inputs.package }}
+
+      - name: Publish
+        run: npm publish "$RUNNER_TEMP"/pack/*.tgz --access public --tag "$NPM_TAG"
+        env:
+          NPM_TAG: ${{ inputs.tag }}
