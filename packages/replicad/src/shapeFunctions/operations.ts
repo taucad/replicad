@@ -157,11 +157,15 @@ const runBooleanBatch = (
 };
 
 /**
- * Fuses or cuts one shape with several tools in one OCCT boolean, without the
- * native batch binding.
+ * Runs one shape against one or more tools as a single OCCT boolean, without
+ * the native batch binding.
+ *
+ * The builder is created empty so that the algorithm runs once, after the
+ * options are set: the two-shape constructors already run it with default
+ * options.
  */
 const runBuilderBoolean = (
-  operation: "fuse" | "cut",
+  operation: BooleanOperation,
   shape: TopoDS_Shape,
   tools: readonly TopoDS_Shape[],
   optimisation: BooleanOperationOptions["optimisation"]
@@ -169,7 +173,11 @@ const runBuilderBoolean = (
   const oc = getOC();
   const r = GCWithScope();
   const builder = r(
-    operation === "fuse" ? new oc.BRepAlgoAPI_Fuse() : new oc.BRepAlgoAPI_Cut()
+    operation === "fuse"
+      ? new oc.BRepAlgoAPI_Fuse()
+      : operation === "cut"
+      ? new oc.BRepAlgoAPI_Cut()
+      : new oc.BRepAlgoAPI_Common()
   );
   const argumentsList = r(makeNCollection_List_TopoDS_Shape([shape]));
   const toolsList = r(makeNCollection_List_TopoDS_Shape(tools));
@@ -202,16 +210,12 @@ export function fuseShapes(
     );
   }
 
-  const oc = getOC();
-  const r = GCWithScope();
-  const builder = r(
-    new oc.BRepAlgoAPI_Fuse(unwrapShape(leftInput), unwrapShape(rightInput))
+  return runBuilderBoolean(
+    "fuse",
+    unwrapShape(leftInput),
+    [unwrapShape(rightInput)],
+    optimisation
   );
-
-  configureGlue(builder, optimisation);
-  builder.Build();
-  builder.SimplifyResult(true, true, 1e-3);
-  return builder.Shape();
 }
 
 /**
@@ -251,16 +255,12 @@ export function cutShape(
     );
   }
 
-  const oc = getOC();
-  const r = GCWithScope();
-  const builder = r(
-    new oc.BRepAlgoAPI_Cut(unwrapShape(shapeInput), unwrapShape(toolInput))
+  return runBuilderBoolean(
+    "cut",
+    unwrapShape(shapeInput),
+    [unwrapShape(toolInput)],
+    optimisation
   );
-
-  configureGlue(builder, optimisation);
-  builder.Build();
-  builder.SimplifyResult(true, true, 1e-3);
-  return builder.Shape();
 }
 
 /**
@@ -300,16 +300,12 @@ export function intersectShapes(
     );
   }
 
-  const oc = getOC();
-  const r = GCWithScope();
-  const builder = r(
-    new oc.BRepAlgoAPI_Common(unwrapShape(leftInput), unwrapShape(rightInput))
+  return runBuilderBoolean(
+    "common",
+    unwrapShape(leftInput),
+    [unwrapShape(rightInput)],
+    optimisation
   );
-
-  configureGlue(builder, optimisation);
-  builder.Build();
-  builder.SimplifyResult(true, true, 1e-3);
-  return builder.Shape();
 }
 
 /**
@@ -487,8 +483,8 @@ export function cutShapeWithPlane(
   );
   const halfSpace = r(halfSpaceBuilder.Solid());
 
+  // The two-shape constructor runs the boolean.
   const builder = r(new oc.BRepAlgoAPI_Cut(shape, halfSpace));
-  builder.Build();
   if (builder.HasErrors()) throw new Error("Could not cut shape with plane");
 
   const cutResult = builder.Shape();
