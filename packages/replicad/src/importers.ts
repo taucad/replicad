@@ -8,29 +8,42 @@ import { _runOperation, getOperationCache } from "./operationCacheHook";
 const uniqueId = () =>
   Date.now().toString(36) + Math.random().toString(36).substring(2);
 
+type ReadContext = {
+  oc: ReturnType<typeof getOC>;
+  r: ReturnType<typeof localGC>[0];
+  gc: ReturnType<typeof localGC>[1];
+  fileName: string;
+};
+
+/** What an import sets up before it reads the file, in the original order. */
+const startImport = (): ReadContext => {
+  const oc = getOC();
+  const [r, gc] = localGC();
+  return { oc, r, gc, fileName: uniqueId() };
+};
+
 /**
  * Creates a new shapes from a STEP file (as a Blob or a File).
  *
  * @category Import
  */
 export async function importSTEP(STLBlob: Blob) {
+  if (!getOperationCache()) {
+    const context = startImport();
+    return readSTEP(context, new Uint8Array(await STLBlob.arrayBuffer()));
+  }
   const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
-  if (!getOperationCache()) return readSTEP(bufferView);
   // Routed on the file's content, once it has been read.
   return _runOperation({
     op: "importSTEP",
     effect: "pure",
     receiver: undefined,
     args: [bufferView],
-    compute: () => readSTEP(bufferView),
+    compute: () => readSTEP(startImport(), bufferView),
   });
 }
 
-function readSTEP(bufferView: Uint8Array) {
-  const oc = getOC();
-  const [r, gc] = localGC();
-
-  const fileName = uniqueId();
+function readSTEP({ oc, r, gc, fileName }: ReadContext, bufferView: Uint8Array) {
   oc.FS.writeFile(`/${fileName}`, bufferView);
 
   const reader = r(new oc.STEPControl_Reader());
@@ -60,23 +73,22 @@ function readSTEP(bufferView: Uint8Array) {
  * @category Import
  */
 export async function importSTL(STLBlob: Blob) {
+  if (!getOperationCache()) {
+    const context = startImport();
+    return readSTL(context, new Uint8Array(await STLBlob.arrayBuffer()));
+  }
   const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
-  if (!getOperationCache()) return readSTL(bufferView);
   // Routed on the file's content, once it has been read.
   return _runOperation({
     op: "importSTL",
     effect: "pure",
     receiver: undefined,
     args: [bufferView],
-    compute: () => readSTL(bufferView),
+    compute: () => readSTL(startImport(), bufferView),
   });
 }
 
-function readSTL(bufferView: Uint8Array) {
-  const oc = getOC();
-  const [r, gc] = localGC();
-
-  const fileName = uniqueId();
+function readSTL({ oc, r, gc, fileName }: ReadContext, bufferView: Uint8Array) {
   oc.FS.writeFile(`/${fileName}`, bufferView);
 
   const reader = r(new oc.StlAPI_Reader());

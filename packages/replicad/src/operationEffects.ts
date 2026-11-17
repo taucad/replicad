@@ -120,6 +120,10 @@ const freshSketcher = (sketcher: any): readonly unknown[] | undefined =>
     ? ["Sketcher", sketcher.plane, sketcher.pointer, sketcher.firstPoint]
     : undefined;
 
+/** Deletes the wires of a compound sketch's sketches. */
+const deleteSketchWires = (receiver: CompoundSketch): void =>
+  receiver.sketches.forEach((sketch) => sketch.wire.delete());
+
 /** `Sketches.extrude` and `revolve` delete the plain sketches they hold. */
 const consumePlainSketches = (receiver: Sketches): void =>
   receiver.sketches.forEach(
@@ -233,18 +237,27 @@ export const classEffects = (): readonly ClassEffects[] => [
     op: "CompoundSketch",
     routed: true,
     members: members({
-      pure: "outerSketch innerSketches wires face extrude revolve loftWith",
-      consumes: "delete",
+      pure: "outerSketch innerSketches face extrude revolve loftWith",
+      // `wires` builds a compound of the sketches' wires, which deletes them.
+      consumes: "delete wires",
     }),
     unrouted: ["delete"],
     routedGetters: ["wires"],
+    consume: { wires: (receiver: CompoundSketch) => deleteSketchWires(receiver) },
   },
   {
     target: Sketches,
     op: "Sketches",
     routed: true,
-    members: members({ pure: "wires faces", consumes: "extrude revolve" }),
+    members: members({ pure: "faces", consumes: "wires extrude revolve" }),
     consume: {
+      // A compound of the members' wires: deletes them.
+      wires: (receiver: Sketches) =>
+        receiver.sketches.forEach((sketch) =>
+          sketch instanceof Sketch
+            ? sketch.wire.delete()
+            : deleteSketchWires(sketch)
+        ),
       extrude: consumePlainSketches,
       revolve: consumePlainSketches,
     },
@@ -258,12 +271,13 @@ export const classEffects = (): readonly ClassEffects[] => [
       pure: `serialize boundingBox repr cut fuse intersect fillet chamfer offset approximate ${BLUEPRINT_OPS} ${SVG}`,
     }),
     unrouted: ["serialize", ...SVG.split(" ")],
-    finderArgs: { fillet: [1], chamfer: [1] },
+    finderArgs: { fillet: [1], chamfer: [1], punchHole: [1] },
   },
   {
     target: Blueprint,
     op: "Blueprint",
     routed: true,
+    finderArgs: { punchHole: [1] },
     members: members({
       alias: "clone",
       consumes: "delete",
@@ -283,6 +297,7 @@ export const classEffects = (): readonly ClassEffects[] => [
     target: Blueprints,
     op: "Blueprints",
     routed: true,
+    finderArgs: { punchHole: [1] },
     members: members({
       alias: "clone",
       pure: `repr boundingBox ${BLUEPRINT_OPS} ${SVG}`,
@@ -293,6 +308,7 @@ export const classEffects = (): readonly ClassEffects[] => [
     target: CompoundBlueprint,
     op: "CompoundBlueprint",
     routed: true,
+    finderArgs: { punchHole: [1] },
     members: members({
       alias: "clone",
       pure: `repr boundingBox toSVGGroup ${BLUEPRINT_OPS} ${SVG}`,
@@ -640,14 +656,45 @@ export const ROUTED_FUNCTION_NAMES = [
  * (see importers.ts). The others are queries, conversions of raw OpenCascade
  * values, configuration, export, and the seam itself.
  */
-export const functionEffects: Readonly<
-  Record<string, { effect: OperationEffect; routed: boolean }>
-> = (() => {
+export interface FunctionEffects {
+  readonly effect: OperationEffect;
+  readonly routed: boolean;
+  /** What a `consumes` function deletes, from its arguments. */
+  readonly consume?: (args: readonly unknown[]) => void;
+  /** The result is a mutable builder (a pen): a cache must never reuse it. */
+  readonly returnsBuilder?: boolean;
+}
+
+/** `compoundShapes` and `makeCompound` delete every shape they are given. */
+const consumeShapeArray = (args: readonly unknown[]): void =>
+  deleteValue(args[0]);
+
+/** Routed functions that are not plain `pure`. */
+const SPECIAL_FUNCTIONS: Readonly<Record<string, FunctionEffects>> = {
+  compoundShapes: { effect: "consumes", routed: true, consume: consumeShapeArray },
+  makeCompound: { effect: "consumes", routed: true, consume: consumeShapeArray },
+  // Takes the face's outer wire with `Face.outerWire`, which deletes the face.
+  sketchFaceOffset: {
+    effect: "consumes",
+    routed: true,
+    consume: (args) => deleteValue(args[0]),
+  },
+  draw: { effect: "pure", routed: true, returnsBuilder: true },
+};
+
+export const functionEffects: Readonly<Record<string, FunctionEffects>> =
+  (() => {
   const routed = (names: string) =>
     names
       .split(/\s+/)
       .filter(Boolean)
-      .map((name) => [name, { effect: "pure", routed: true }] as const);
+      .map(
+        (name) =>
+          [
+            name,
+            SPECIAL_FUNCTIONS[name] ?? { effect: "pure", routed: true },
+          ] as const
+      );
   const direct = (effect: OperationEffect, names: string) =>
     names
       .split(/\s+/)

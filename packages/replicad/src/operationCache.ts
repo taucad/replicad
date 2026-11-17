@@ -24,8 +24,10 @@ import {
 } from "./operationCacheHook";
 import {
   classEffects,
+  functionEffects,
   ROUTED_FUNCTION_NAMES,
   type ClassEffects,
+  type FunctionEffects,
 } from "./operationEffects";
 import { Shape } from "./shapes";
 import { Finder } from "./finders/definitions";
@@ -116,13 +118,16 @@ const instrumentClass = (definition: ClassEffects): void => {
     } else if (get && definition.routedGetters?.includes(key)) {
       const getter = get;
       const op = `get:${definition.op}.${key}`;
+      const effect = definition.members[key];
+      const consumeGetter = definition.consume?.[key];
       get = function (this: object): unknown {
         return _runOperation({
           op,
-          effect: "pure",
+          effect,
           receiver: this,
           args: [],
           compute: () => getter.call(this),
+          consume: consumeGetter && (() => consumeGetter(this, [])),
         });
       };
       changed = true;
@@ -192,6 +197,8 @@ export function setOperationCache(
   cache: OperationCache | undefined
 ): OperationCache | undefined {
   const previous = getOperationCache();
+  // Throws while an operation runs, before anything is changed.
+  _setActiveOperationCache(previous);
   if (cache && !previous) {
     classEffects().forEach(instrumentClass);
     instrumentFinders();
@@ -208,11 +215,14 @@ export function setOperationCache(
 // library-internal callers keep calling the implementations.
 // ---------------------------------------------------------------------------
 
-const routeFunction = <F extends (...args: any[]) => any>(
+/** @ignore Exported for tests. */
+export const routeFunction = <F extends (...args: any[]) => any>(
   op: string,
-  original: F
-): F =>
-  function (this: unknown): ReturnType<F> {
+  original: F,
+  effects: FunctionEffects = { effect: "pure", routed: true }
+): F => {
+  const { effect, consume, returnsBuilder } = effects;
+  const routed = function (this: unknown): ReturnType<F> {
     // No cache: call the implementation with the same arguments object,
     // without copying them or building a request.
     // eslint-disable-next-line prefer-rest-params
@@ -221,12 +231,19 @@ const routeFunction = <F extends (...args: any[]) => any>(
     const args = Array.prototype.slice.call(arguments) as Parameters<F>;
     return _runOperation({
       op,
-      effect: "pure",
+      effect,
       receiver: undefined,
       args,
+      returnsBuilder,
       compute: () => original(...args),
+      consume: consume && (() => consume(args)),
     });
-  } as F;
+  };
+  // Keep the implementation's name and arity.
+  Object.defineProperty(routed, "name", { value: original.name || op });
+  Object.defineProperty(routed, "length", { value: original.length });
+  return routed as F;
+};
 
 const implementations = {
   ...shapeHelpers,
@@ -249,6 +266,6 @@ export const routedFunctions = Object.fromEntries(
     const implementation = implementations[name];
     if (typeof implementation !== "function")
       throw new Error(`No implementation for routed function ${name}`);
-    return [name, routeFunction(name, implementation)];
+    return [name, routeFunction(name, implementation, functionEffects[name])];
   })
 ) as unknown as { [K in RoutedName]: (typeof implementations)[K] };

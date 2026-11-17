@@ -37,10 +37,26 @@ export interface OperationRequest<T> {
   readonly effect: OperationEffect;
   /** `this` of a method; `undefined` for a free function. */
   readonly receiver: object | undefined;
-  /** The arguments as passed. Do not mutate them. */
+  /**
+   * The arguments as passed. Do not mutate them.
+   *
+   * Do not identify a finder instance (`EdgeFinder`, `FaceFinder`,
+   * `CornerFinder`) by its object identity: its clause methods mutate it
+   * without being routed, so the same object can select differently from one
+   * call to the next. Describe it by its clauses, or let the operation's
+   * step key the selection.
+   */
   readonly args: readonly unknown[];
-  /** Positions of finder callbacks (`(finder, shape) => finder`) among `args`. */
+  /**
+   * Positions of finder arguments among `args`: a finder callback
+   * (`(finder, shape) => finder`), or for some operations a finder or a face.
+   */
   readonly finderArgs?: readonly number[];
+  /**
+   * The result is a mutable builder (a pen from `draw()`): its later calls
+   * change it in place, so a cache must never hand back a kept one.
+   */
+  readonly returnsBuilder?: boolean;
   /**
    * The operation's errors are a deterministic function of its inputs (it
    * calls no user code that the inputs do not describe), so a cache may
@@ -113,8 +129,11 @@ let depth = 0;
 export function _setActiveOperationCache(
   cache: OperationCache | undefined
 ): void {
+  if (depth !== 0)
+    throw new Error(
+      "The operation cache cannot be changed while an operation runs"
+    );
   activeCache = cache;
-  depth = 0;
 }
 
 /** The installed operation cache, if any. */
