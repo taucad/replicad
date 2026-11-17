@@ -185,7 +185,12 @@ export default class Blueprint implements DrawingInterface {
     const oc = getOC();
 
     const edges = curvesAsEdgesOnFace(this.curves, face, scaleMode);
-    const wire = assembleWire(edges);
+    let wire;
+    try {
+      wire = assembleWire(edges);
+    } finally {
+      edges.forEach((edge) => edge.delete());
+    }
 
     oc.BRepLib.BuildCurves3d(wire.wrapped);
 
@@ -195,32 +200,46 @@ export default class Blueprint implements DrawingInterface {
 
     const sketch = new Sketch(wire);
 
-    if (wire.isClosed) {
-      const baseFace = sketch.clone().face();
-      sketch.defaultOrigin = baseFace.pointOnSurface(0.5, 0.5);
-      sketch.defaultDirection = baseFace.normalAt();
-      if (baseFace.orientation !== face.orientation) {
-        sketch.defaultDirection = sketch.defaultDirection.multiply(-1);
+    // The setters keep copies of the vectors they are given.
+    const r = ocScope();
+    try {
+      if (wire.isClosed) {
+        const outline = r(sketch.clone());
+        const baseFace = r(outline.face());
+        sketch.defaultOrigin = r(baseFace.pointOnSurface(0.5, 0.5));
+        sketch.defaultDirection = r(baseFace.normalAt());
+        if (baseFace.orientation !== face.orientation) {
+          sketch.defaultDirection = r(sketch.defaultDirection.multiply(-1));
+        }
+        sketch.baseFace = face;
+      } else {
+        const startPoint = r(wire.startPoint);
+        sketch.defaultOrigin = startPoint;
+        sketch.defaultDirection = r(face.normalAt(startPoint));
+        sketch.baseFace = face;
       }
-      sketch.baseFace = face;
-    } else {
-      const startPoint = wire.startPoint;
-      sketch.defaultOrigin = startPoint;
-      sketch.defaultDirection = face.normalAt(startPoint);
-      sketch.baseFace = face;
+    } finally {
+      r.dispose();
     }
     return sketch;
   }
 
   subFace(face: Face, origin?: Point | null): Face {
-    let subFace = this.translate(face.uvCoordinates(origin || face.center))
-      .sketchOnFace(face, "original")
-      .face();
+    const r = ocScope();
+    try {
+      const center = origin || r(face.center);
+      const moved = r(this.translate(face.uvCoordinates(center)));
+      const sketch = r(moved.sketchOnFace(face, "original"));
+      const subFace = sketch.face();
 
-    if (subFace.orientation !== face.orientation) {
-      subFace = subFace.flipOrientation();
+      if (subFace.orientation !== face.orientation) {
+        r(subFace);
+        return subFace.flipOrientation();
+      }
+      return subFace;
+    } finally {
+      r.dispose();
     }
-    return subFace;
   }
 
   punchHole(
@@ -240,7 +259,9 @@ export default class Blueprint implements DrawingInterface {
     const gc = ocScope();
     try {
       const foundFace = getSingleFace(face, shape);
-      const hole = this.subFace(foundFace, origin);
+      // A face the caller gave stays theirs; one a finder found is ours.
+      if (foundFace !== face) gc(foundFace);
+      const hole = gc(this.subFace(foundFace, origin));
 
       const maker = gc(
         new oc.BRepFeat_MakeDPrism(
@@ -266,9 +287,14 @@ export default class Blueprint implements DrawingInterface {
   toSVGPathD() {
     const r = ocScope();
     try {
-      const bp = this.clone().mirror([1, 0], [0, 0], "plane");
+      // mirror returns new curves; this blueprint is left untouched.
+      const bp = r(this.mirror([1, 0], [0, 0], "plane"));
 
       const compatibleCurves = approximateAsSvgCompatibleCurve(bp.curves);
+      const mirrored = new Set(bp.curves);
+      compatibleCurves.forEach((curve) => {
+        if (!mirrored.has(curve)) r(curve);
+      });
 
       const path = compatibleCurves.flatMap((c) => {
         return adaptedCurveToPathElem(r(c.adaptor()), c.lastPoint);

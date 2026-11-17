@@ -9,8 +9,13 @@ export type SingleFace =
 
 export function getSingleFace(f: SingleFace, shape: AnyShape): Face {
   if (f instanceof Face) return f;
-  const finder = f instanceof FaceFinder ? f : f(new FaceFinder(), shape);
-  return finder.find(shape, { unique: true });
+  if (f instanceof FaceFinder) return f.find(shape, { unique: true });
+  const created = new FaceFinder();
+  try {
+    return f(created, shape).find(shape, { unique: true });
+  } finally {
+    created.delete();
+  }
 }
 
 type CartesianAxis = "X" | "Y" | "Z";

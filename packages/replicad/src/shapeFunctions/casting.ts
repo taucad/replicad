@@ -31,6 +31,10 @@ const HANDLE_CLASS: Record<TopologyKind, string> = {
  * downcast to a new handle and deleted. If the cast throws, its input is left
  * alone. A caller that must keep using the handle passes a copy.
  *
+ * Casting another wrapper's `wrapped` handle that already has the right
+ * class therefore makes the two wrappers share that one handle, by design:
+ * the first one deleted deletes it, and the other then throws on use.
+ *
  * This keeps the casting module independent from the wrapper classes, while
  * letting the caller keep the mapping fully typed.
  */

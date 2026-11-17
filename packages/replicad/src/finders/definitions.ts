@@ -163,6 +163,9 @@ export abstract class Finder<Type, FilterType> {
     if (unique) {
       if (elements.length !== 1) {
         console.error(elements);
+        elements.forEach((element) =>
+          (element as { delete?: () => void }).delete?.()
+        );
         throw new Error("Finder has not found a unique solution");
       }
       return elements[0];

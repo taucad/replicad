@@ -251,23 +251,36 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
     tolerance = 1e-7
   ): PlaneSplitResult<Solid | Compound> {
     const result = splitShape(this.wrapped, plane, offset, tolerance);
-    const castResult = (
-      piece: TopoDS_Solid | TopoDS_Compound | null
-    ): Solid | Compound | null => {
-      if (!piece) return null;
-      const resultShape = cast(piece);
-      if (resultShape instanceof Solid || resultShape instanceof Compound) {
-        return resultShape;
+    const sides = ["positive", "negative", "on"] as const;
+    const pieces: PlaneSplitResult<Solid | Compound> = {
+      positive: null,
+      negative: null,
+      on: null,
+    };
+    let side = 0;
+    try {
+      for (; side < sides.length; side++) {
+        const piece = result[sides[side]];
+        if (!piece) continue;
+        const resultShape = cast(piece);
+        if (
+          !(resultShape instanceof Solid || resultShape instanceof Compound)
+        ) {
+          resultShape.delete();
+          side += 1;
+          throw new Error("Split produced an unexpected non-solid shape");
+        }
+        pieces[sides[side]] = resultShape;
       }
-      resultShape.delete();
-      throw new Error("Split produced an unexpected non-solid shape");
-    };
-
-    return {
-      positive: castResult(result.positive),
-      negative: castResult(result.negative),
-      on: castResult(result.on),
-    };
+    } catch (error) {
+      // Delete what was cast and the raw pieces not reached (a cast that
+      // throws leaves its piece alone).
+      sides.forEach((name) => pieces[name]?.delete());
+      for (let rest = side; rest < sides.length; rest++)
+        result[sides[rest]]?.delete();
+      throw error;
+    }
+    return pieces;
   }
 
   /**
@@ -585,13 +598,25 @@ export class Wire extends _1DShape<TopoDS_Wire> {
       kinds[kind],
       false
     );
-    offsetter.Perform(offset, 0);
-
-    const newShape = cast(offsetter.Shape());
-    offsetter.delete();
+    let newShape: AnyShape;
+    try {
+      offsetter.Perform(offset, 0);
+      const raw = offsetter.Shape();
+      try {
+        newShape = cast(raw);
+      } catch (error) {
+        // cast leaves its input alone when it throws (a null result).
+        raw.delete();
+        throw error;
+      }
+    } finally {
+      offsetter.delete();
+    }
     this.delete();
-    if (!(newShape instanceof Wire))
+    if (!(newShape instanceof Wire)) {
+      newShape.delete();
       throw new Error("Could not offset with a wire");
+    }
     return newShape;
   }
 }
