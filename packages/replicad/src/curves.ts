@@ -225,10 +225,10 @@ export function curvesAsEdgesOnFace(
       const surface = r(new oc.BRepAdaptor_Surface(face.wrapped));
       const cylinder = r(surface.Cylinder());
       if (!cylinder.Direct()) {
-        geomSurf = geomSurf.UReversed();
+        geomSurf = r(geomSurf.UReversed());
       }
       const radius = cylinder.Radius();
-      const affinity = stretchTransform2d(1 / radius, [0, 1]);
+      const affinity = r(stretchTransform2d(1 / radius, [0, 1]));
       transformation = affinity.wrapped;
     }
 
@@ -238,7 +238,7 @@ export function curvesAsEdgesOnFace(
 
       if (bounds.uMin !== 0) {
         const translation = r(new oc.gp_GTrsf2d());
-        translation.SetTranslationPart(new oc.gp_XY(0, -bounds.uMin));
+        translation.SetTranslationPart(r(new oc.gp_XY(0, -bounds.uMin)));
         transformation.Multiply(translation);
       }
 
@@ -254,6 +254,7 @@ export function curvesAsEdgesOnFace(
     }
 
     const modifiedCurves = transformCurves(curves, transformation);
+    modifiedCurves.forEach((curve) => r(curve));
     const edges = curvesAsEdgesOnSurface(modifiedCurves, geomSurf);
     return edges;
   } finally {

@@ -9,7 +9,7 @@
  * A failure lists the leaked handles by the replicad source line that created
  * them.
  */
-import { beforeAll, describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import * as replicad from "../../src/index";
 import { getOC } from "../../src/index";
 import {
@@ -243,6 +243,27 @@ const ledgerCases: Record<string, () => void> = {
     const b = box();
     del(r.deserializeShape(b.serialize()), b);
   },
+  "drawing.toSVG": () => {
+    const drawing = r.drawRoundedRectangle(10, 5, 1);
+    drawing.toSVG();
+    del(drawing);
+  },
+  "drawing.sketchOnFace": () => {
+    const b = box();
+    const face = new r.FaceFinder().inPlane("XY", 10);
+    const top = face.find(b, { unique: true });
+    const drawing = r.drawRectangle(2, 2);
+    del(drawing.sketchOnFace(top, "original"), drawing, top, face, b);
+  },
+  "drawing.punchHole": () => {
+    const b = box();
+    const drawing = r.drawCircle(1);
+    del(
+      drawing.punchHole(b, (f: any) => f.inPlane("XY", 10)),
+      drawing,
+      b
+    );
+  },
   "workload: cut + fillet + meshEdges": () => {
     const b = box();
     const c = r.makeCylinder(3, 20);
@@ -270,6 +291,55 @@ describe("T1 handle ledger: no operation leaves a handle behind", () => {
       if (leaks.length > 0)
         throw new Error(`Leaked handles:\n${leaks.join("\n")}`);
       expect(ledger.stats().doubleDeletes - before, "double deletes").toBe(0);
+    });
+  }
+});
+
+/** T4: operations driven into a failure leave nothing behind either. */
+const throwCases: Record<string, () => void> = {
+  "Wire.offset2D that fails": () => {
+    const drawing = r.drawRectangle(10, 10);
+    const sketch = drawing.sketchOnPlane();
+    const wire = sketch.wires();
+    try {
+      wire.offset2D(-20);
+    } catch {
+      // expected
+    }
+    del(wire, sketch, drawing);
+  },
+  "Finder.find({ unique }) that fails": () => {
+    const b = box();
+    const finder = new r.EdgeFinder().inDirection("Z");
+    try {
+      finder.find(b, { unique: true });
+    } catch {
+      // expected
+    }
+    del(finder, b);
+  },
+};
+
+describe("T4 throw paths: a failed operation leaves no handle behind", () => {
+  for (const [name, operation] of Object.entries(throwCases)) {
+    test(name, () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      let threw = 0;
+      const counting = () => {
+        try {
+          operation();
+        } catch {
+          threw += 1;
+        }
+      };
+      try {
+        const leaks = leaksOf(counting);
+        if (leaks.length > 0)
+          throw new Error(`Leaked handles:\n${leaks.join("\n")}`);
+        expect(threw).toBe(0);
+      } finally {
+        errors.mockRestore();
+      }
     });
   }
 });
