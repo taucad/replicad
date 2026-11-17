@@ -22,6 +22,32 @@ Use `./init` for lazy automatic selection, `./single/init` or `./multi/init` for
 a fixed variant, and the matching `./single/wasm` or `./multi/wasm` URL. The
 `./single` and `./multi` subpaths expose raw Emscripten factories.
 
+## Replicad entry points
+
+Besides the OCCT bindings, the build carries Replicad's own C++ helpers
+(`build-config/wrappers/`). The `...WithOptions` forms extend the original entry
+points without changing them; with the defaults shown they return the same
+bytes.
+
+| Entry point | Adds |
+| --- | --- |
+| `ReplicadBinaryBrep.Write(shape, withTriangles, withNormals)` | Binary BRep in memory (`ReplicadBinaryBrepData`: `getPtr()`, `getSize()`), with or without the cached triangulation. `Write(shape, true, false)` equals `BinTools.Write(shape, path, progress)`. |
+| `ReplicadBinaryBrep.Allocate(size)`, `ReplicadBinaryBrep.Read(data)` | Read binary BRep from a buffer filled at `getPtr()`. |
+| `ReplicadBinaryBrep.IdentityHash(shape)` | 64-bit FNV-1a (16 hex digits) of the BRep without triangulation; meshing or cleaning never changes it. |
+| `ReplicadMeshExtractor.meshWithOptions(shape, tol, angTol, clean, userBreak)`, `extractWithOptions(shape, tol, angTol, skipNormals, clean, userBreak)` | `clean: true` is `mesh`/`extract`; `clean: false` keeps an existing triangulation that is at least as fine as requested. |
+| `ReplicadBooleanBatch.{Fuse,Cut,Common}WithOptions(..., useOBB, userBreak)` | `useOBB` turns on BOPAlgo's oriented-bounding-box prefilter (the plain forms pass `false`). |
+| `new ReplicadUserBreak(wordAddress, expectedValue, useHook)` | A cooperative stop. `new ReplicadUserBreak(0, 0, false)` is disabled and attaches no progress indicator. |
+
+A `ReplicadUserBreak` stops the operation once the 32-bit integer at
+`wordAddress` differs from `expectedValue`, or once `oc.replicadUserBreak()`
+(called on the main runtime thread only, and never allowed to throw) returns a
+truthy value. The word suits the `multi` variant, whose memory another thread
+can write (`ReplicadAbortWord` allocates one); the hook works in both variants,
+for example by reading a host `SharedArrayBuffer` with `Atomics.load`. A stopped
+Boolean returns a result with `IsUserBreak()` true, errors and no shape; a
+stopped mesh throws `ReplicadUserBreakError` (message `ReplicadUserBreak`,
+readable with `oc.getExceptionMessage`).
+
 ## Building
 
 The build is driven by [`@libcascade/toolchain`][toolchain] from the typed

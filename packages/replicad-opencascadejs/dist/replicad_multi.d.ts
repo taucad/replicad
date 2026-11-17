@@ -33002,11 +33002,46 @@ declare class GeomToolsWrapper {
   [Symbol.dispose](): void;
 }
 
+declare class ReplicadAbortWord {
+  constructor();
+  constructor(other: ReplicadAbortWord);
+  Address(): number;
+  Load(): number;
+  Store(value: number): void;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+declare class ReplicadBinaryBrep {
+  constructor();
+  static Write(shape: TopoDS_Shape, withTriangles: boolean, withNormals: boolean): ReplicadBinaryBrepData;
+  static Allocate(size: number): ReplicadBinaryBrepData;
+  static Read(data: ReplicadBinaryBrepData): TopoDS_Shape;
+  static IdentityHash(shape: TopoDS_Shape): string;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+declare class ReplicadBinaryBrepData {
+  constructor();
+  constructor(other: ReplicadBinaryBrepData);
+  getPtr(): number;
+  getSize(): number;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
 declare class ReplicadBooleanBatch {
   constructor();
   static Fuse(shapes: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number): ReplicadBooleanBatchResult;
   static Cut(arguments: TopTools_ListOfShape, tools: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number): ReplicadBooleanBatchResult;
   static Common(shapes: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number): ReplicadBooleanBatchResult;
+  static FuseWithOptions(shapes: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number, useOBB: boolean, userBreak: ReplicadUserBreak): ReplicadBooleanBatchResult;
+  static CutWithOptions(arguments: TopTools_ListOfShape, tools: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number, useOBB: boolean, userBreak: ReplicadUserBreak): ReplicadBooleanBatchResult;
+  static CommonWithOptions(shapes: TopTools_ListOfShape, nonDestructive: boolean, glue: number, simplify: boolean, angularTolerance: number, fuzzyValue: number, useOBB: boolean, userBreak: ReplicadUserBreak): ReplicadBooleanBatchResult;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
@@ -33021,6 +33056,7 @@ declare class ReplicadBooleanBatchResult {
   HasWarnings(): boolean;
   Errors(): string;
   Warnings(): string;
+  IsUserBreak(): boolean;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
@@ -33066,6 +33102,8 @@ declare class ReplicadMeshExtractor {
   constructor();
   static mesh(shape: TopoDS_Shape, tolerance: number, angularTolerance: number): void;
   static extract(shape: TopoDS_Shape, tolerance: number, angularTolerance: number, skipNormals: boolean): ReplicadMeshData;
+  static meshWithOptions(shape: TopoDS_Shape, tolerance: number, angularTolerance: number, clean: boolean, userBreak: ReplicadUserBreak): void;
+  static extractWithOptions(shape: TopoDS_Shape, tolerance: number, angularTolerance: number, skipNormals: boolean, clean: boolean, userBreak: ReplicadUserBreak): ReplicadMeshData;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
@@ -33176,6 +33214,18 @@ declare class ReplicadStepModelTools {
   HasProductRepresentation(): boolean;
   AddDatum(name: string, originX: number, originY: number, originZ: number, xAxisX: number, xAxisY: number, xAxisZ: number, zAxisX: number, zAxisY: number, zAxisZ: number): void;
   Commit(): void;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+declare class ReplicadUserBreak {
+  constructor();
+  constructor(wordAddress: number, expectedValue: number, useHook: boolean);
+  WordAddress(): number;
+  ExpectedValue(): number;
+  UsesHook(): boolean;
+  IsEnabled(): boolean;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
@@ -34226,6 +34276,9 @@ export type { Poly_Triangulation };
 export type { Precision };
 export type { Quantity_Color };
 export type { Quantity_ColorRGBA };
+export type { ReplicadAbortWord };
+export type { ReplicadBinaryBrep };
+export type { ReplicadBinaryBrepData };
 export type { ReplicadBooleanBatch };
 export type { ReplicadBooleanBatchResult };
 export type { ReplicadEdgeMeshData };
@@ -34242,6 +34295,7 @@ export type { ReplicadShapeHasher };
 export type { ReplicadShapeIdentity };
 export type { ReplicadShapeIdentityInfo };
 export type { ReplicadStepModelTools };
+export type { ReplicadUserBreak };
 export type { STEPCAFControl_Writer };
 export type { STEPControl_Reader };
 export type { STEPControl_StepModelType };
@@ -34706,6 +34760,9 @@ export type OpenCascadeInstance = {
   NCollection_Sequence_int: typeof NCollection_Sequence_int;
   BRepToolsWrapper: typeof BRepToolsWrapper;
   GeomToolsWrapper: typeof GeomToolsWrapper;
+  ReplicadAbortWord: typeof ReplicadAbortWord;
+  ReplicadBinaryBrep: typeof ReplicadBinaryBrep;
+  ReplicadBinaryBrepData: typeof ReplicadBinaryBrepData;
   ReplicadBooleanBatch: typeof ReplicadBooleanBatch;
   ReplicadBooleanBatchResult: typeof ReplicadBooleanBatchResult;
   ReplicadEdgeMeshData: typeof ReplicadEdgeMeshData;
@@ -34722,6 +34779,7 @@ export type OpenCascadeInstance = {
   ReplicadShapeIdentity: typeof ReplicadShapeIdentity;
   ReplicadShapeIdentityInfo: typeof ReplicadShapeIdentityInfo;
   ReplicadStepModelTools: typeof ReplicadStepModelTools;
+  ReplicadUserBreak: typeof ReplicadUserBreak;
   TColStd_IndexedDataMapOfStringString: typeof TColStd_IndexedDataMapOfStringString;
   TopoDS: typeof TopoDS;
   OCJS: typeof OCJS;

@@ -271,8 +271,17 @@ export default defineBuild({
     "ReplicadShapeIdentity",
     "ReplicadBooleanBatchResult",
     "ReplicadBooleanBatch",
+    "ReplicadUserBreak",
+    "ReplicadAbortWord",
+    "ReplicadBinaryBrepData",
+    "ReplicadBinaryBrep",
   ],
   customBindings: [
+    // First: the mesh extractor and the Boolean batch use its indicator.
+    {
+      file: "build-config/wrappers/user-break.cpp",
+      symbols: ["ReplicadUserBreak", "ReplicadAbortWord"],
+    },
     {
       file: "build-config/wrappers/shape-hasher.cpp",
       symbols: ["ReplicadShapeHasher"],
@@ -321,6 +330,10 @@ export default defineBuild({
     {
       file: "build-config/wrappers/boolean-batch.cpp",
       symbols: ["ReplicadBooleanBatchResult", "ReplicadBooleanBatch"],
+    },
+    {
+      file: "build-config/wrappers/binary-brep.cpp",
+      symbols: ["ReplicadBinaryBrepData", "ReplicadBinaryBrep"],
     },
   ],
   settings: {
