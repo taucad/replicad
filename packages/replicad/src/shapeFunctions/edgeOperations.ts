@@ -6,7 +6,7 @@ import type {
 
 import { DEG2RAD } from "../constants.js";
 import { getOC } from "../oclib.js";
-import { GCWithScope, type Deletable } from "../register.js";
+import { ocScope, type Deletable } from "../register.js";
 import { unwrapShape, type ShapeInput } from "./shapeInput.js";
 import { iterTopo } from "./topology.js";
 
@@ -61,8 +61,8 @@ export function isFilletRadius(radius: unknown): radius is FilletRadius {
  * Normalizes a radius callback, a filter configuration, or a radius applying
  * to every edge into a lazy sequence of explicit edge/radius pairs.
  *
- * Temporary edge wrappers remain alive while each yielded value is consumed
- * and are deleted before advancing to the next edge.
+ * Each yielded edge handle remains alive while the value is consumed and is
+ * deleted before advancing to the next edge: copy it to keep it.
  */
 export function* selectEdgeRadii<R, EdgeType extends Deletable>(
   shapeInput: ShapeInput,
@@ -74,7 +74,11 @@ export function* selectEdgeRadii<R, EdgeType extends Deletable>(
 
   if (isRadius(radiusConfig)) {
     for (const edge of iterTopo(shape, "edge")) {
-      yield { edge, radius: radiusConfig };
+      try {
+        yield { edge, radius: radiusConfig };
+      } finally {
+        edge.delete();
+      }
     }
     return;
   }
@@ -120,27 +124,31 @@ export function filletShape(
   edges: Iterable<FilletEdgeConfig>
 ): TopoDS_Shape {
   const oc = getOC();
-  const r = GCWithScope();
-  const builder = r(
-    new oc.BRepFilletAPI_MakeFillet(
-      unwrapShape(shapeInput),
-      oc.ChFi3d_FilletShape.ChFi3d_Rational
-    )
-  );
+  const r = ocScope();
+  try {
+    const builder = r(
+      new oc.BRepFilletAPI_MakeFillet(
+        unwrapShape(shapeInput),
+        oc.ChFi3d_FilletShape.ChFi3d_Rational
+      )
+    );
 
-  let edgeCount = 0;
-  for (const { radius, edge: edgeInput } of edges) {
-    const edge = unwrapShape(edgeInput);
-    if (typeof radius === "number") {
-      builder.Add(radius, edge);
-    } else {
-      builder.Add(radius[0], radius[1], edge);
+    let edgeCount = 0;
+    for (const { radius, edge: edgeInput } of edges) {
+      const edge = unwrapShape(edgeInput);
+      if (typeof radius === "number") {
+        builder.Add(radius, edge);
+      } else {
+        builder.Add(radius[0], radius[1], edge);
+      }
+      edgeCount += 1;
     }
-    edgeCount += 1;
-  }
 
-  if (!edgeCount) throw new Error("Could not fillet, no edge was selected");
-  return builder.Shape();
+    if (!edgeCount) throw new Error("Could not fillet, no edge was selected");
+    return builder.Shape();
+  } finally {
+    r.dispose();
+  }
 }
 
 export function chamferShape(
@@ -148,32 +156,36 @@ export function chamferShape(
   edges: Iterable<ChamferEdgeConfig>
 ): TopoDS_Shape {
   const oc = getOC();
-  const r = GCWithScope();
-  const builder = r(new oc.BRepFilletAPI_MakeChamfer(unwrapShape(shapeInput)));
+  const r = ocScope();
+  try {
+    const builder = r(new oc.BRepFilletAPI_MakeChamfer(unwrapShape(shapeInput)));
 
-  let edgeCount = 0;
-  for (const config of edges) {
-    const edge = unwrapShape(config.edge);
-    if ("radius" in config) {
-      builder.Add(config.radius, edge);
-    } else if ("distances" in config) {
-      builder.Add(
-        config.distances[0] ?? 1,
-        config.distances[1] ?? 1,
-        edge,
-        unwrapShape(config.face)
-      );
-    } else {
-      builder.AddDA(
-        config.distance,
-        config.angle * DEG2RAD,
-        edge,
-        unwrapShape(config.face)
-      );
+    let edgeCount = 0;
+    for (const config of edges) {
+      const edge = unwrapShape(config.edge);
+      if ("radius" in config) {
+        builder.Add(config.radius, edge);
+      } else if ("distances" in config) {
+        builder.Add(
+          config.distances[0] ?? 1,
+          config.distances[1] ?? 1,
+          edge,
+          unwrapShape(config.face)
+        );
+      } else {
+        builder.AddDA(
+          config.distance,
+          config.angle * DEG2RAD,
+          edge,
+          unwrapShape(config.face)
+        );
+      }
+      edgeCount += 1;
     }
-    edgeCount += 1;
-  }
 
-  if (!edgeCount) throw new Error("Could not chamfer, no edge was selected");
-  return builder.Shape();
+    if (!edgeCount) throw new Error("Could not chamfer, no edge was selected");
+    return builder.Shape();
+  } finally {
+    r.dispose();
+  }
 }

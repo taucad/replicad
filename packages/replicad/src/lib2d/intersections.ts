@@ -12,7 +12,9 @@ function* pointsIteration(
 
   for (let i = 1; i <= nPoints; i++) {
     const point = intersector.Point(i);
-    yield [point.X(), point.Y()];
+    const coordinates: Point2D = [point.X(), point.Y()];
+    point.delete();
+    yield coordinates;
   }
 }
 
@@ -66,9 +68,11 @@ export const intersectCurves = (
 
   if (segmentsAsPoints.length) {
     intersections.push(...segmentsAsPoints);
-    commonSegments = commonSegments.filter(
-      (c) => !samePoint(c.firstPoint, c.lastPoint, precision)
-    );
+    commonSegments = commonSegments.filter((c) => {
+      const keep = !samePoint(c.firstPoint, c.lastPoint, precision);
+      if (!keep) c.delete();
+      return keep;
+    });
   }
 
   const commonSegmentsPoints = commonSegments.flatMap((c) => [

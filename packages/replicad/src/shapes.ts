@@ -486,7 +486,7 @@ export abstract class _1DShape<Type extends TopoDS_Shape> extends Shape<Type> {
   protected abstract _geomAdaptor(): CurveLike;
   get repr(): string {
     const { startPoint, endPoint } = this;
-    const retVal = `start: (${this.startPoint.repr}) end:(${this.endPoint.repr})`;
+    const retVal = `start: (${startPoint.repr}) end:(${endPoint.repr})`;
     startPoint.delete();
     endPoint.delete();
     return retVal;
@@ -496,36 +496,46 @@ export abstract class _1DShape<Type extends TopoDS_Shape> extends Shape<Type> {
     return new Curve(this._geomAdaptor());
   }
 
+  /** Runs `read` on a temporary curve adaptor, deleted afterwards. */
+  private _readCurve<T>(read: (curve: Curve) => T): T {
+    const curve = this.curve;
+    try {
+      return read(curve);
+    } finally {
+      curve.delete();
+    }
+  }
+
   get startPoint(): Vector {
-    return this.curve.startPoint;
+    return this._readCurve((curve) => curve.startPoint);
   }
 
   get endPoint(): Vector {
-    return this.curve.endPoint;
+    return this._readCurve((curve) => curve.endPoint);
   }
 
   tangentAt(position = 0): Vector {
-    return this.curve.tangentAt(position);
+    return this._readCurve((curve) => curve.tangentAt(position));
   }
 
   pointAt(position = 0): Vector {
-    return this.curve.pointAt(position);
+    return this._readCurve((curve) => curve.pointAt(position));
   }
 
   get isClosed(): boolean {
-    return this.curve.isClosed;
+    return this._readCurve((curve) => curve.isClosed);
   }
 
   get isPeriodic(): boolean {
-    return this.curve.isPeriodic;
+    return this._readCurve((curve) => curve.isPeriodic);
   }
 
   get period(): number {
-    return this.curve.period;
+    return this._readCurve((curve) => curve.period);
   }
 
   get geomType(): CurveType {
-    return this.curve.curveType;
+    return this._readCurve((curve) => curve.curveType);
   }
 
   get length(): number {
@@ -848,10 +858,12 @@ export class _3DShape<Type extends TopoDS_Shape>
         : tolerance;
     let filter;
     let thickness;
+    let ownFinder: FaceFinder | null = null;
 
     if (typeof thicknessOrConfig === "number") {
       thickness = thicknessOrConfig;
       const ff = new FaceFinder();
+      ownFinder = ff;
       filter =
         typeof toleranceOrFinderFcn === "function"
           ? toleranceOrFinderFcn(ff, this)
@@ -861,7 +873,20 @@ export class _3DShape<Type extends TopoDS_Shape>
       filter = thicknessOrConfig.filter;
     }
 
-    const filteredFaces = filter.find(this);
+    let filteredFaces: Face[];
+    try {
+      filteredFaces = filter.find(this);
+    } finally {
+      ownFinder?.delete();
+    }
+    try {
+      return this._shell(filteredFaces, thickness, tol);
+    } finally {
+      filteredFaces.forEach((face) => face.delete());
+    }
+  }
+
+  private _shell(filteredFaces: Face[], thickness: number, tol: number) {
     const shell = (): Shape3D => {
       const newShape = cast(
         shellShape(this.wrapped, {
@@ -985,15 +1010,23 @@ export class _3DShape<Type extends TopoDS_Shape>
       isChamferRadius,
       (edge) => new Edge(edge)
     );
-    const chamfers = mapSelectedEdges(
+    const chamferFaces: Face[] = [];
+    try {
+      return this._chamfer(
+        mapSelectedEdges(
       selectedEdges,
       ({ radius, edge }): ChamferEdgeConfig => {
         if (typeof radius === "number") return { radius, edge };
 
-        const face = radius
-          .selectedFace(new FaceFinder(), this)
-          .find(this, { unique: true });
+        const finder = new FaceFinder();
+        let face: Face;
+        try {
+          face = radius.selectedFace(finder, this).find(this, { unique: true });
+        } finally {
+          finder.delete();
+        }
         if (!face) throw new Error("Could not find face for chamfer");
+        chamferFaces.push(face);
 
         return "distances" in radius
           ? { edge, face, distances: radius.distances }
@@ -1004,8 +1037,15 @@ export class _3DShape<Type extends TopoDS_Shape>
               angle: radius.angle,
             };
       }
-    );
-    const chamfer = (configs: typeof chamfers | ChamferEdgeConfig[]) => {
+        )
+      );
+    } finally {
+      chamferFaces.forEach((face) => face.delete());
+    }
+  }
+
+  private _chamfer(chamfers: Iterable<ChamferEdgeConfig>): Shape3D {
+    const chamfer = (configs: Iterable<ChamferEdgeConfig>) => {
       const newShape = cast(chamferShape(this.wrapped, configs));
 
       if (!isShape3D(newShape))
@@ -1054,7 +1094,25 @@ export class _3DShape<Type extends TopoDS_Shape>
     faceFinder: FinderFunction<FaceFinder, AnyShape>,
     neutralPlane: Plane | PlaneName = "XY"
   ): Shape3D {
-    const faces = faceFinder(new FaceFinder(), this).find(this);
+    const finder = new FaceFinder();
+    let faces: Face[];
+    try {
+      faces = faceFinder(finder, this).find(this);
+    } finally {
+      finder.delete();
+    }
+    try {
+      return this._draft(faces, angle, neutralPlane);
+    } finally {
+      faces.forEach((face) => face.delete());
+    }
+  }
+
+  private _draft(
+    faces: Face[],
+    angle: number,
+    neutralPlane: Plane | PlaneName
+  ): Shape3D {
     const draft = () => {
       const newShape = cast(
         draftShape(this.wrapped, { faces, angle, neutralPlane })

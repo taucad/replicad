@@ -10,7 +10,7 @@ import type {
 import { uuidv } from "../utils/uuid";
 import { getOC } from "../oclib";
 import { AnyShape } from "../shapes";
-import { GCWithScope, WrappingObj } from "../register";
+import { ocScope, WrappingObj } from "../register";
 
 const wrapString = (str: string): TCollection_ExtendedString => {
   const oc = getOC();
@@ -157,51 +157,54 @@ export function exportSTEP(
   { unit, modelUnit }: { unit?: SupportedUnit; modelUnit?: SupportedUnit } = {}
 ): Blob {
   const oc = getOC();
-  const r = GCWithScope();
+  const r = ocScope();
+  try {
+    const doc = createAssembly(shapes);
 
-  const doc = createAssembly(shapes);
+    if (unit || modelUnit) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const dummy = r(new oc.STEPCAFControl_Writer());
 
-  if (unit || modelUnit) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const dummy = r(new oc.STEPCAFControl_Writer());
+      oc.Interface_Static.SetCVal(
+        "xstep.cascade.unit",
+        (modelUnit || unit || "MM").toUpperCase()
+      );
+      oc.Interface_Static.SetCVal(
+        "write.step.unit",
+        (unit || modelUnit || "MM").toUpperCase()
+      );
+    }
 
-    oc.Interface_Static.SetCVal(
-      "xstep.cascade.unit",
-      (modelUnit || unit || "MM").toUpperCase()
+    const session = r(new oc.XSControl_WorkSession());
+    const writer = r(
+      new oc.STEPCAFControl_Writer(
+        session,
+        false
+      )
     );
-    oc.Interface_Static.SetCVal(
-      "write.step.unit",
-      (unit || modelUnit || "MM").toUpperCase()
-    );
-  }
+    writer.SetColorMode(true);
+    writer.SetLayerMode(true);
+    writer.SetNameMode(true);
+    writer.SetMaterialMode(true);
+    oc.Interface_Static.SetIVal("write.surfacecurve.mode", 1);
+    oc.Interface_Static.SetIVal("write.precision.mode", 0);
+    oc.Interface_Static.SetIVal("write.step.assembly", 2);
+    oc.Interface_Static.SetIVal("write.step.schema", 5);
 
-  const session = r(new oc.XSControl_WorkSession());
-  const writer = r(
-    new oc.STEPCAFControl_Writer(
-      session,
-      false
-    )
-  );
-  writer.SetColorMode(true);
-  writer.SetLayerMode(true);
-  writer.SetNameMode(true);
-  writer.SetMaterialMode(true);
-  oc.Interface_Static.SetIVal("write.surfacecurve.mode", 1);
-  oc.Interface_Static.SetIVal("write.precision.mode", 0);
-  oc.Interface_Static.SetIVal("write.step.assembly", 2);
-  oc.Interface_Static.SetIVal("write.step.schema", 5);
+    const filename = "export.step";
+    const progress = r(new oc.Message_ProgressRange());
+    const success = writer.Perform(doc.wrapped, filename, progress);
 
-  const filename = "export.step";
-  const progress = r(new oc.Message_ProgressRange());
-  const success = writer.Perform(doc.wrapped, filename, progress);
-
-  if (success) {
-    const file = oc.FS.readFile("/" + filename);
-    oc.FS.unlink("/" + filename);
-    // Emscripten's Uint8Array is ArrayBuffer-backed despite TypeScript's broader type.
-    const blob = new Blob([file as BlobPart], { type: "application/STEP" });
-    return blob;
-  } else {
-    throw new Error("WRITE STEP FILE FAILED.");
+    if (success) {
+      const file = oc.FS.readFile("/" + filename);
+      oc.FS.unlink("/" + filename);
+      // Emscripten's Uint8Array is ArrayBuffer-backed despite TypeScript's broader type.
+      const blob = new Blob([file as BlobPart], { type: "application/STEP" });
+      return blob;
+    } else {
+      throw new Error("WRITE STEP FILE FAILED.");
+    }
+  } finally {
+    r.dispose();
   }
 }

@@ -2,7 +2,7 @@ import type { TopoDS_Face } from "replicad-opencascadejs";
 
 import { asPnt, type Point, Vector } from "../geom.js";
 import { getOC } from "../oclib.js";
-import { GCWithScope } from "../register.js";
+import { ocScope } from "../register.js";
 import { unwrapShape, type ShapeInput } from "./shapeInput.js";
 
 export interface FaceUVBounds {
@@ -50,18 +50,22 @@ export function faceUVCoordinates(
 ): [number, number] {
   const oc = getOC();
   const face = unwrapShape(faceInput);
-  const r = GCWithScope();
-  const surface = r(oc.BRep_Tool.Surface(face));
-  const projectedPoint = r(
-    new oc.GeomAPI_ProjectPointOnSurf(
-      r(asPnt(point)),
-      surface,
-      oc.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad
-    )
-  );
+  const r = ocScope();
+  try {
+    const surface = r(oc.BRep_Tool.Surface(face));
+    const projectedPoint = r(
+      new oc.GeomAPI_ProjectPointOnSurf(
+        r(asPnt(point)),
+        surface,
+        oc.Extrema_ExtAlgo.Extrema_ExtAlgo_Grad
+      )
+    );
 
-  const { U, V } = projectedPoint.LowerDistanceParameters(0, 0);
-  return [U, V];
+    const { U, V } = projectedPoint.LowerDistanceParameters(0, 0);
+    return [U, V];
+  } finally {
+    r.dispose();
+  }
 }
 
 export function faceNormalAt(
@@ -81,13 +85,17 @@ export function faceNormalAt(
     v = 0.5 * (vMin + vMax);
   }
 
-  const r = GCWithScope();
-  const point = r(new oc.gp_Pnt());
-  const normal = r(new oc.gp_Vec());
-  const properties = r(new oc.BRepGProp_Face(face, false));
-  properties.Normal(u, v, point, normal);
+  const r = ocScope();
+  try {
+    const point = r(new oc.gp_Pnt());
+    const normal = r(new oc.gp_Vec());
+    const properties = r(new oc.BRepGProp_Face(face, false));
+    properties.Normal(u, v, point, normal);
 
-  return new Vector(normal);
+    return new Vector(normal);
+  } finally {
+    r.dispose();
+  }
 }
 
 export function faceCenter(faceInput: ShapeInput<TopoDS_Face>): Vector {
@@ -100,7 +108,14 @@ export function faceCenter(faceInput: ShapeInput<TopoDS_Face>): Vector {
     true
   );
 
-  const center = new Vector(properties.CentreOfMass());
-  properties.delete();
-  return center;
+  try {
+    const centreOfMass = properties.CentreOfMass();
+    try {
+      return new Vector(centreOfMass);
+    } finally {
+      centreOfMass.delete();
+    }
+  } finally {
+    properties.delete();
+  }
 }

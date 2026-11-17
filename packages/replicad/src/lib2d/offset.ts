@@ -1,5 +1,5 @@
 import { getOC } from "../oclib";
-import { GCWithScope } from "../register";
+import { ocScope } from "../register";
 import { approximateAsBSpline } from "./approximations";
 import { Curve2D } from "./Curve2D";
 import { Point2D } from "./definitions";
@@ -27,82 +27,86 @@ export const make2dOffset = (
   curve: Curve2D,
   offset: number
 ): Curve2D | { collapsed: true; firstPoint: Point2D; lastPoint: Point2D } => {
-  const r = GCWithScope();
-  const curveType = curve.geomType;
+  const r = ocScope();
+  try {
+    const curveType = curve.geomType;
 
-  if (curveType === "CIRCLE") {
-    const circle = r(r(curve.adaptor()).Circle());
-    const radius = circle.Radius();
+    if (curveType === "CIRCLE") {
+      const circle = r(r(curve.adaptor()).Circle());
+      const radius = circle.Radius();
 
-    const orientationCorrection = circle.IsDirect() ? 1 : -1;
-    const orientedOffset = offset * orientationCorrection;
+      const orientationCorrection = circle.IsDirect() ? 1 : -1;
+      const orientedOffset = offset * orientationCorrection;
 
-    const newRadius = radius + orientedOffset;
+      const newRadius = radius + orientedOffset;
 
-    if (newRadius < 1e-10) {
-      const centerPos = r(circle.Location());
-      const center: Point2D = [centerPos.X(), centerPos.Y()];
+      if (newRadius < 1e-10) {
+        const centerPos = r(circle.Location());
+        const center: Point2D = [centerPos.X(), centerPos.Y()];
 
-      // We replace collapsed arcs by a segment of line
-      const offsetViaCenter = (point: Point2D): Point2D => {
-        const [x, y] = normalize2d(subtract2d(point, center));
-        return add2d(point, [orientedOffset * x, orientedOffset * y]);
-      };
+        // We replace collapsed arcs by a segment of line
+        const offsetViaCenter = (point: Point2D): Point2D => {
+          const [x, y] = normalize2d(subtract2d(point, center));
+          return add2d(point, [orientedOffset * x, orientedOffset * y]);
+        };
 
+        return {
+          collapsed: true,
+          firstPoint: offsetViaCenter(curve.firstPoint),
+          lastPoint: offsetViaCenter(curve.lastPoint),
+        };
+      }
+
+      const oc = getOC();
+      const newCircle = r(new oc.gp_Circ2d(r(circle.Axis()), newRadius));
+      const newInnerCurve = r(new oc.Geom2d_Circle(newCircle));
+      const newCurve = new oc.Geom2d_TrimmedCurve(
+        newInnerCurve,
+        curve.firstParameter,
+        curve.lastParameter,
+        true,
+        true
+      );
+
+      return new Curve2D(newCurve);
+    }
+
+    if (curveType === "LINE") {
+      const { firstPoint, lastPoint } = offsetEndPoints(
+        curve.firstPoint,
+        curve.lastPoint,
+        offset
+      );
+
+      return make2dSegmentCurve(firstPoint, lastPoint);
+    }
+
+    // We should compute the analytic offset for a curve
+
+    const oc = getOC();
+
+    const offsetCurve = new Curve2D(
+      new oc.Geom2d_OffsetCurve(curve.wrapped, offset, true)
+    );
+
+    // While return the offset curve itself would be the more correct thing to do,
+    // opencascade does some weird stuff with it (for instance after mirroring it)
+    // This approximates it with a continuous bspline
+    const approximation = approximateAsBSpline(offsetCurve.adaptor());
+
+    // We need a better way to handle curves that self intersect, for now we
+    // replace them with a line
+    const selfIntersects = selfIntersections(approximation);
+    if (selfIntersects.length) {
       return {
         collapsed: true,
-        firstPoint: offsetViaCenter(curve.firstPoint),
-        lastPoint: offsetViaCenter(curve.lastPoint),
+        firstPoint: approximation.firstPoint,
+        lastPoint: approximation.lastPoint,
       };
     }
 
-    const oc = getOC();
-    const newCircle = new oc.gp_Circ2d(circle.Axis(), newRadius);
-    const newInnerCurve = new oc.Geom2d_Circle(newCircle);
-    const newCurve = new oc.Geom2d_TrimmedCurve(
-      newInnerCurve,
-      curve.firstParameter,
-      curve.lastParameter,
-      true,
-      true
-    );
-
-    return new Curve2D(newCurve);
+    return approximation;
+  } finally {
+    r.dispose();
   }
-
-  if (curveType === "LINE") {
-    const { firstPoint, lastPoint } = offsetEndPoints(
-      curve.firstPoint,
-      curve.lastPoint,
-      offset
-    );
-
-    return make2dSegmentCurve(firstPoint, lastPoint);
-  }
-
-  // We should compute the analytic offset for a curve
-
-  const oc = getOC();
-
-  const offsetCurve = new Curve2D(
-    new oc.Geom2d_OffsetCurve(curve.wrapped, offset, true)
-  );
-
-  // While return the offset curve itself would be the more correct thing to do,
-  // opencascade does some weird stuff with it (for instance after mirroring it)
-  // This approximates it with a continuous bspline
-  const approximation = approximateAsBSpline(offsetCurve.adaptor());
-
-  // We need a better way to handle curves that self intersect, for now we
-  // replace them with a line
-  const selfIntersects = selfIntersections(approximation);
-  if (selfIntersects.length) {
-    return {
-      collapsed: true,
-      firstPoint: approximation.firstPoint,
-      lastPoint: approximation.lastPoint,
-    };
-  }
-
-  return approximation;
 };

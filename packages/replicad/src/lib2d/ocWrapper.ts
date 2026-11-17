@@ -5,7 +5,7 @@ import type {
   gp_Vec2d,
 } from "replicad-opencascadejs";
 import { getOC } from "../oclib";
-import { localGC } from "../register";
+import { ocScope } from "../register";
 import { Point2D } from "./definitions";
 
 export const pnt = ([x, y]: Point2D): gp_Pnt2d => {
@@ -25,8 +25,11 @@ export const vec = ([x, y]: Point2D): gp_Vec2d => {
 
 export const axis2d = (point: Point2D, direction: Point2D): gp_Ax2d => {
   const oc = getOC();
-  const [r, gc] = localGC();
-  const axis = new oc.gp_Ax2d(r(pnt(point)), r(direction2d(direction)));
-  gc();
-  return axis;
+  const r = ocScope();
+  try {
+    const axis = new oc.gp_Ax2d(r(pnt(point)), r(direction2d(direction)));
+    return axis;
+  } finally {
+    r.dispose();
+  }
 };

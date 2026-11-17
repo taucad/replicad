@@ -3,6 +3,7 @@ import {
   curvesAsEdgesOnFace,
   curvesAsEdgesOnPlane,
   curvesBoundingBox,
+  transformCurvesWith,
   mirrorTransform2d,
   rotateTransform2d,
   ScaleMode,
@@ -30,7 +31,7 @@ import { DEG2RAD } from "../constants";
 import { DrawingInterface } from "./lib";
 import round5 from "../utils/round5";
 import { asSVG, viewbox } from "./svg";
-import { GCWithScope } from "../register";
+import { ocScope } from "../register";
 import { getSingleFace, SingleFace } from "../finders";
 
 /**
@@ -55,10 +56,12 @@ export default class Blueprint implements DrawingInterface {
   delete() {
     this.curves.forEach((c) => c.delete());
     if (this._boundingBox) this._boundingBox.delete();
+    this._boundingBox = null;
   }
 
+  /** A copy with its own curves: deleting one leaves the other intact. */
   clone() {
-    return new Blueprint(this.curves);
+    return new Blueprint(this.curves.map((curve) => curve.clone()));
   }
 
   get repr() {
@@ -102,7 +105,8 @@ export default class Blueprint implements DrawingInterface {
     direction: Point2D,
     origin: Point2D = [0, 0]
   ): Blueprint {
-    const curves = stretchTransform2d(ratio, direction, origin).transformCurves(
+    const curves = transformCurvesWith(
+      stretchTransform2d(ratio, direction, origin),
       this.curves
     );
     return new Blueprint(curves);
@@ -110,14 +114,16 @@ export default class Blueprint implements DrawingInterface {
 
   scale(scaleFactor: number, center?: Point2D): Blueprint {
     const centerPoint = center || this.boundingBox.center;
-    const curves = scaleTransform2d(scaleFactor, centerPoint).transformCurves(
+    const curves = transformCurvesWith(
+      scaleTransform2d(scaleFactor, centerPoint),
       this.curves
     );
     return new Blueprint(curves);
   }
 
   rotate(angle: number, center?: Point2D): Blueprint {
-    const curves = rotateTransform2d(angle * DEG2RAD, center).transformCurves(
+    const curves = transformCurvesWith(
+      rotateTransform2d(angle * DEG2RAD, center),
       this.curves
     );
     return new Blueprint(curves);
@@ -129,7 +135,8 @@ export default class Blueprint implements DrawingInterface {
     const translationVector = isPoint2D(xDistOrPoint)
       ? xDistOrPoint
       : ([xDistOrPoint, yDist] as Point2D);
-    const curves = translationTransform2d(translationVector).transformCurves(
+    const curves = transformCurvesWith(
+      translationTransform2d(translationVector),
       this.curves
     );
     return new Blueprint(curves);
@@ -140,11 +147,10 @@ export default class Blueprint implements DrawingInterface {
     origin: Point2D = [0, 0],
     mode: "center" | "plane" = "center"
   ): Blueprint {
-    const curves = mirrorTransform2d(
-      centerOrDirection,
-      origin,
-      mode
-    ).transformCurves(this.curves);
+    const curves = transformCurvesWith(
+      mirrorTransform2d(centerOrDirection, origin, mode),
+      this.curves
+    );
     return new Blueprint(curves);
   }
 
@@ -157,13 +163,22 @@ export default class Blueprint implements DrawingInterface {
         ? makePlane(inputPlane)
         : makePlane(inputPlane, origin);
 
-    const edges = curvesAsEdgesOnPlane(this.curves, plane);
-    const wire = assembleWire(edges);
+    try {
+      const edges = curvesAsEdgesOnPlane(this.curves, plane);
+      let wire;
+      try {
+        wire = assembleWire(edges);
+      } finally {
+        edges.forEach((edge) => edge.delete());
+      }
 
-    return new Sketch(wire, {
-      defaultOrigin: plane.origin,
-      defaultDirection: plane.zDir,
-    });
+      return new Sketch(wire, {
+        defaultOrigin: plane.origin,
+        defaultDirection: plane.zDir,
+      });
+    } finally {
+      plane.delete();
+    }
   }
 
   sketchOnFace(face: Face, scaleMode?: ScaleMode): Sketch {
@@ -222,43 +237,50 @@ export default class Blueprint implements DrawingInterface {
     } = {}
   ) {
     const oc = getOC();
-    const gc = GCWithScope();
+    const gc = ocScope();
+    try {
+      const foundFace = getSingleFace(face, shape);
+      const hole = this.subFace(foundFace, origin);
 
-    const foundFace = getSingleFace(face, shape);
-    const hole = this.subFace(foundFace, origin);
-
-    const maker = gc(
-      new oc.BRepFeat_MakeDPrism(
-        shape.wrapped,
-        hole.wrapped,
-        foundFace.wrapped,
-        draftAngle * DEG2RAD,
-        0,
-        false
-      )
-    );
-    if (height) {
-      maker.Perform(height);
-    } else {
-      maker.PerformThruAll();
+      const maker = gc(
+        new oc.BRepFeat_MakeDPrism(
+          shape.wrapped,
+          hole.wrapped,
+          foundFace.wrapped,
+          draftAngle * DEG2RAD,
+          0,
+          false
+        )
+      );
+      if (height) {
+        maker.Perform(height);
+      } else {
+        maker.PerformThruAll();
+      }
+      return cast(maker.Shape());
+    } finally {
+      gc.dispose();
     }
-    return cast(maker.Shape());
   }
 
   toSVGPathD() {
-    const r = GCWithScope();
-    const bp = this.clone().mirror([1, 0], [0, 0], "plane");
+    const r = ocScope();
+    try {
+      const bp = this.clone().mirror([1, 0], [0, 0], "plane");
 
-    const compatibleCurves = approximateAsSvgCompatibleCurve(bp.curves);
+      const compatibleCurves = approximateAsSvgCompatibleCurve(bp.curves);
 
-    const path = compatibleCurves.flatMap((c) => {
-      return adaptedCurveToPathElem(r(c.adaptor()), c.lastPoint);
-    });
+      const path = compatibleCurves.flatMap((c) => {
+        return adaptedCurveToPathElem(r(c.adaptor()), c.lastPoint);
+      });
 
-    const [startX, startY] = bp.curves[0].firstPoint;
-    return `M ${round5(startX)} ${round5(startY)} ${path.join(" ")}${
-      bp.isClosed() ? " Z" : ""
-    }`;
+      const [startX, startY] = bp.curves[0].firstPoint;
+      return `M ${round5(startX)} ${round5(startY)} ${path.join(" ")}${
+        bp.isClosed() ? " Z" : ""
+      }`;
+    } finally {
+      r.dispose();
+    }
   }
 
   toSVGPath() {
@@ -291,20 +313,23 @@ export default class Blueprint implements DrawingInterface {
     const oc = getOC();
     const intersector = new oc.Geom2dAPI_InterCurveCurve();
     const segment = make2dSegmentCurve(point, this.boundingBox.outsidePoint());
-    let crossCounts = 0;
+    try {
+      let crossCounts = 0;
 
-    const onCurve = this.curves.find((c) => c.isOnCurve(point));
-    if (onCurve) return false;
+      const onCurve = this.curves.find((c) => c.isOnCurve(point));
+      if (onCurve) return false;
 
-    this.curves.forEach((c) => {
-      if (c.boundingBox.isOut(segment.boundingBox)) return;
-      intersector.Init(segment.wrapped, c.wrapped, 1e-9);
-      crossCounts += intersector.NbPoints();
-    });
+      this.curves.forEach((c) => {
+        if (c.boundingBox.isOut(segment.boundingBox)) return;
+        intersector.Init(segment.wrapped, c.wrapped, 1e-9);
+        crossCounts += intersector.NbPoints();
+      });
 
-    intersector.delete();
-
-    return !!(crossCounts % 2);
+      return !!(crossCounts % 2);
+    } finally {
+      intersector.delete();
+      segment.delete();
+    }
   }
 
   isClosed() {

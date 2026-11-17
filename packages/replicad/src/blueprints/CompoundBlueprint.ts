@@ -20,8 +20,17 @@ export default class CompoundBlueprint implements DrawingInterface {
     this._boundingBox = null;
   }
 
+  /** A copy with its own curves: deleting one leaves the other intact. */
   clone() {
-    return new CompoundBlueprint(this.blueprints);
+    return new CompoundBlueprint(
+      this.blueprints.map((blueprint) => blueprint.clone())
+    );
+  }
+
+  delete() {
+    this.blueprints.forEach((blueprint) => blueprint.delete());
+    this._boundingBox?.delete();
+    this._boundingBox = null;
   }
 
   get boundingBox(): BoundingBox2d {

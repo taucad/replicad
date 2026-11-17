@@ -1,5 +1,5 @@
 import { Vector, Plane, Point } from "../geom.js";
-import { localGC } from "../register.js";
+import { ocScope, type OcScope } from "../register.js";
 import { makeFace, makeNewFaceWithinFace } from "../shapeHelpers.js";
 import {
   basicFaceExtrusion,
@@ -57,9 +57,12 @@ export default class Sketch implements SketchInterface {
     return this._baseFace;
   }
 
+  /** Keeps a copy of `newFace`; the previous base face is deleted. */
   set baseFace(newFace: Face | null | undefined) {
+    const previous = this._baseFace;
     if (!newFace) this._baseFace = newFace;
     else this._baseFace = newFace.clone();
+    if (previous && previous !== this._baseFace) previous.delete();
   }
 
   delete(): void {
@@ -74,7 +77,7 @@ export default class Sketch implements SketchInterface {
       defaultOrigin: this.defaultOrigin,
       defaultDirection: this.defaultDirection,
     });
-    if (this.baseFace) sketch.baseFace = this.baseFace.clone();
+    if (this.baseFace) sketch.baseFace = this.baseFace;
     return sketch;
   }
 
@@ -82,16 +85,22 @@ export default class Sketch implements SketchInterface {
     return this._defaultOrigin;
   }
 
+  /** Keeps a copy of `newOrigin`; the previous origin is deleted. */
   set defaultOrigin(newOrigin: Point) {
+    const previous = this._defaultOrigin;
     this._defaultOrigin = new Vector(newOrigin);
+    previous?.delete();
   }
 
   get defaultDirection(): Vector {
     return this._defaultDirection;
   }
 
+  /** Keeps a copy of `newDirection`; the previous direction is deleted. */
   set defaultDirection(newDirection: Point) {
+    const previous = this._defaultDirection;
     this._defaultDirection = new Vector(newDirection);
+    previous?.delete();
   }
 
   /**
@@ -159,45 +168,44 @@ export default class Sketch implements SketchInterface {
       origin?: Point;
     } = {}
   ): Shape3D {
-    const [r, gc] = localGC();
-
-    const extrusionVec = r(
-      new Vector(extrusionDirection || this.defaultDirection)
-        .normalized()
-        .multiply(extrusionDistance)
-    );
-
-    if (extrusionProfile && !twistAngle) {
-      const solid = complexExtrude(
-        this.wire,
-        origin || this.defaultOrigin,
-        extrusionVec,
-        extrusionProfile
+    const r = ocScope();
+    try {
+      const extrusionVec = r(
+        r(
+          r(new Vector(extrusionDirection || this.defaultDirection)).normalized()
+        ).multiply(extrusionDistance)
       );
-      gc();
+
+      if (extrusionProfile && !twistAngle) {
+        const solid = complexExtrude(
+          this.wire,
+          origin || this.defaultOrigin,
+          extrusionVec,
+          extrusionProfile
+        );
+        this.delete();
+        return solid;
+      }
+
+      if (twistAngle) {
+        const solid = twistExtrude(
+          this.wire,
+          twistAngle,
+          origin || this.defaultOrigin,
+          extrusionVec,
+          extrusionProfile
+        );
+        this.delete();
+        return solid;
+      }
+
+      const face = r(makeFace(this.wire));
+      const solid = basicFaceExtrusion(face, extrusionVec);
       this.delete();
       return solid;
+    } finally {
+      r.dispose();
     }
-
-    if (twistAngle) {
-      const solid = twistExtrude(
-        this.wire,
-        twistAngle,
-        origin || this.defaultOrigin,
-        extrusionVec,
-        extrusionProfile
-      );
-      gc();
-      this.delete();
-      return solid;
-    }
-
-    const face = makeFace(this.wire);
-    const solid = basicFaceExtrusion(face, extrusionVec);
-
-    gc();
-    this.delete();
-    return solid;
   }
 
   /**
@@ -211,15 +219,29 @@ export default class Sketch implements SketchInterface {
     sketchOnPlane: (plane: Plane, origin: Point) => this,
     sweepConfig: GenericSweepConfig = {}
   ): Shape3D {
-    const startPoint = this.wire.startPoint;
-    const normal = this.wire.tangentAt(1e-9).multiply(-1).normalize();
-    const xDir = normal.cross(this.defaultDirection).multiply(-1);
+    const r = ocScope();
+    try {
+      return this._sweepSketch(r, sketchOnPlane, sweepConfig);
+    } finally {
+      r.dispose();
+    }
+  }
+
+  private _sweepSketch(
+    r: OcScope,
+    sketchOnPlane: (plane: Plane, origin: Point) => this,
+    sweepConfig: GenericSweepConfig
+  ): Shape3D {
+    const startPoint = r(this.wire.startPoint);
+    const normal = r(r(this.wire.tangentAt(1e-9)).multiply(-1)).normalize();
+    const xDir = r(r(normal.cross(this.defaultDirection)).multiply(-1));
 
     const stepWanted = _stepWanted();
     const makeSketch = () =>
-      sketchOnPlane(new Plane(startPoint, xDir, normal), startPoint);
-    // The factory is user code: what it calls is routed as user calls.
-    const sketch = stepWanted ? _userCallback(makeSketch) : makeSketch();
+      sketchOnPlane(r(new Plane(startPoint, xDir, normal)), startPoint);
+    // The factory is user code: what it calls is routed as user calls. The
+    // sweep consumes the sketch it returns.
+    const sketch = r(stepWanted ? _userCallback(makeSketch) : makeSketch());
 
     const config: GenericSweepConfig = {
       forceProfileSpineOthogonality: true,

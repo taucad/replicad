@@ -99,7 +99,7 @@ export abstract class Finder3d<Type extends FaceOrEdge> extends Finder<
    * @category Filter
    */
   atAngleWith(direction: Direction = "Z", angle = 0): this {
-    const myDirection = makeDirVector(direction);
+    const myDirection = this._own(makeDirVector(direction));
 
     const checkAngle = ({ normal }: { normal: Vector | null }) => {
       // We do not care about the orientation
@@ -126,8 +126,9 @@ export abstract class Finder3d<Type extends FaceOrEdge> extends Finder<
     tolerance = 1e-6
   ): this {
     const vertex = makeVertex(point);
-    const query = new DistanceQuery(vertex);
+    const query = this._own(new DistanceQuery(vertex));
     const queryPoint = vertex.asTuple();
+    vertex.delete();
 
     const checkPoint = ({ element }: { element: Type }) => {
       if (
@@ -172,8 +173,9 @@ export abstract class Finder3d<Type extends FaceOrEdge> extends Finder<
    */
   withinDistance(distance: number, point: Point = [0, 0, 0]): this {
     const vertex = makeVertex(point);
-    const query = new DistanceQuery(vertex);
+    const query = this._own(new DistanceQuery(vertex));
     const queryPoint = vertex.asTuple();
+    vertex.delete();
 
     const checkPoint = ({ element }: { element: Type }) => {
       if (isDefinitelyOutsidePointDistance(element, distance, queryPoint))
@@ -193,7 +195,7 @@ export abstract class Finder3d<Type extends FaceOrEdge> extends Finder<
    * @category Filter
    */
   inBox(corner1: Point, corner2: Point) {
-    const box = makeBox(corner1, corner2);
+    const box = this._own(makeBox(corner1, corner2));
     return this.inShape(box);
   }
 
@@ -205,7 +207,7 @@ export abstract class Finder3d<Type extends FaceOrEdge> extends Finder<
    * @category Filter
    */
   inShape(shape: AnyShape) {
-    const query = new DistanceQuery(shape);
+    const query = this._own(new DistanceQuery(shape));
 
     const checkPoint = ({ element }: { element: Type }) => {
       return query.distanceTo(element) < 1e-6;

@@ -22,6 +22,15 @@ export type CurveInput = CurveLike | { readonly wrapped: CurveLike };
 const unwrapCurve = (curve: CurveInput): CurveLike =>
   "wrapped" in curve ? curve.wrapped : curve;
 
+/** A Vector copied from a point the caller owns, which is then deleted. */
+const takeVector = (point: gp_Pnt): Vector => {
+  try {
+    return new Vector(point);
+  } finally {
+    point.delete();
+  }
+};
+
 const mapCurveParameter = (curve: CurveLike, position: number): number => {
   const firstParam = curve.FirstParameter();
   const lastParam = curve.LastParameter();
@@ -36,7 +45,7 @@ export function curveType(curveInput: CurveInput): CurveType {
 
 export function curvePointAt(curveInput: CurveInput, position = 0.5): Vector {
   const curve = unwrapCurve(curveInput);
-  return new Vector(curve.Value(mapCurveParameter(curve, position)));
+  return takeVector(curve.Value(mapCurveParameter(curve, position)));
 }
 
 export function curveTangentAt(curveInput: CurveInput, position = 0.5): Vector {
@@ -68,11 +77,11 @@ export class Curve extends WrappingObj<CurveLike> {
   }
 
   get startPoint(): Vector {
-    return new Vector(this.wrapped.Value(this.wrapped.FirstParameter()));
+    return takeVector(this.wrapped.Value(this.wrapped.FirstParameter()));
   }
 
   get endPoint(): Vector {
-    return new Vector(this.wrapped.Value(this.wrapped.LastParameter()));
+    return takeVector(this.wrapped.Value(this.wrapped.LastParameter()));
   }
 
   pointAt(position = 0.5): Vector {

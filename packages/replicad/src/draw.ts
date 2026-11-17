@@ -1,6 +1,8 @@
 import {
+  _ownCurves,
   ApproximationOptions,
   BoundingBox2d,
+  Curve2D,
   deserializeCurve2D,
   make2dCircle,
   make2dEllipse,
@@ -49,6 +51,69 @@ import { SingleFace } from "./finders";
  * draw a shape, or use some of the canned shapes like circles or rectangles.
  */
 
+/** Every 2D shape object of a drawing's tree. */
+const shapeObjects = (shape: Shape2D, into = new Set<object>()): Set<object> => {
+  if (!shape) return into;
+  into.add(shape);
+  if (!(shape instanceof Blueprint))
+    shape.blueprints.forEach((child) => shapeObjects(child, into));
+  return into;
+};
+
+/** The curve arrays of a 2D shape's blueprints. */
+const curveArrays = (shape: Shape2D): Curve2D[][] => {
+  if (!shape) return [];
+  if (shape instanceof Blueprint) return [shape.curves];
+  return shape.blueprints.flatMap((child) => curveArrays(child));
+};
+
+/**
+ * A result tree that shares no shape object with `inputs` (its curves are
+ * dealt with by `_ownCurves`).
+ */
+const detach = (shape: Shape2D, inputs: Set<object>): Shape2D => {
+  if (!shape) return shape;
+  if (shape instanceof Blueprint)
+    return inputs.has(shape) ? new Blueprint([...shape.curves]) : shape;
+  if (shape instanceof CompoundBlueprint) {
+    const children = shape.blueprints.map(
+      (child) => detach(child, inputs) as Blueprint
+    );
+    if (inputs.has(shape)) return new CompoundBlueprint(children);
+    shape.blueprints = children;
+    return shape;
+  }
+  const children = shape.blueprints.map(
+    (child) => detach(child, inputs) as Blueprint | CompoundBlueprint
+  );
+  if (inputs.has(shape)) return new Blueprints(children);
+  shape.blueprints = children;
+  return shape;
+};
+
+/**
+ * Runs a 2D operation on drawings so that the drawing it returns owns its
+ * curves alone: deleting it deletes nothing its inputs hold, and the curves
+ * the operation built and dropped are deleted.
+ */
+const freshDrawing = (
+  inputs: readonly Drawing[],
+  run: () => Shape2D
+): Drawing => {
+  const inputShapes = inputs.map(
+    (drawing) => (drawing as unknown as { innerShape: Shape2D }).innerShape
+  );
+  const objects = new Set<object>();
+  inputShapes.forEach((shape) => shapeObjects(shape, objects));
+  return new Drawing(
+    _ownCurves(
+      inputShapes.flatMap((shape) => curveArrays(shape).flat()),
+      () => detach(run(), objects),
+      curveArrays
+    )
+  );
+};
+
 export class Drawing implements DrawingInterface {
   private innerShape: Shape2D;
 
@@ -58,6 +123,11 @@ export class Drawing implements DrawingInterface {
 
   clone(): Drawing {
     return new Drawing(this.innerShape?.clone() || null);
+  }
+
+  /** Deletes the curves the drawing owns. */
+  delete(): void {
+    this.innerShape?.delete();
   }
 
   serialize(): string {
@@ -132,7 +202,9 @@ export class Drawing implements DrawingInterface {
    * @category Drawing Modifications
    */
   cut(other: Drawing): Drawing {
-    return new Drawing(cut2D(this.innerShape, other.innerShape));
+    return freshDrawing([this, other], () =>
+      cut2D(this.innerShape, other.innerShape)
+    );
   }
 
   /**
@@ -141,7 +213,9 @@ export class Drawing implements DrawingInterface {
    * @category Drawing Modifications
    */
   fuse(other: Drawing): Drawing {
-    return new Drawing(fuse2D(this.innerShape, other.innerShape));
+    return freshDrawing([this, other], () =>
+      fuse2D(this.innerShape, other.innerShape)
+    );
   }
 
   /**
@@ -150,7 +224,9 @@ export class Drawing implements DrawingInterface {
    * @category Drawing Modifications
    */
   intersect(other: Drawing): Drawing {
-    return new Drawing(intersect2D(this.innerShape, other.innerShape));
+    return freshDrawing([this, other], () =>
+      intersect2D(this.innerShape, other.innerShape)
+    );
   }
 
   /**
@@ -164,7 +240,9 @@ export class Drawing implements DrawingInterface {
     filter?: FinderFunction<CornerFinder, Shape2D>
   ): Drawing {
     const finder = filter && filter(new CornerFinder(), this.innerShape);
-    return new Drawing(fillet2D(this.innerShape, radius, finder));
+    return freshDrawing([this], () =>
+      fillet2D(this.innerShape, radius, finder)
+    );
   }
 
   /**
@@ -178,7 +256,9 @@ export class Drawing implements DrawingInterface {
     filter?: FinderFunction<CornerFinder, Shape2D>
   ): Drawing {
     const finder = filter && filter(new CornerFinder(), this.innerShape);
-    return new Drawing(chamfer2D(this.innerShape, radius, finder));
+    return freshDrawing([this], () =>
+      chamfer2D(this.innerShape, radius, finder)
+    );
   }
 
   sketchOnPlane(inputPlane: Plane): SketchInterface | Sketches;
@@ -225,7 +305,9 @@ export class Drawing implements DrawingInterface {
   }
 
   offset(distance: number, offsetConfig: Offset2DConfig = {}): Drawing {
-    return new Drawing(offset(this.innerShape, distance, offsetConfig));
+    return freshDrawing([this], () =>
+      offset(this.innerShape, distance, offsetConfig)
+    );
   }
 
   approximate(
@@ -235,7 +317,9 @@ export class Drawing implements DrawingInterface {
     if (target !== "svg") {
       throw new Error("Only 'svg' is supported for now");
     }
-    return new Drawing(approximateForSVG(this.innerShape, options));
+    return freshDrawing([this], () =>
+      approximateForSVG(this.innerShape, options)
+    );
   }
 
   get blueprint(): Blueprint {
@@ -490,17 +574,24 @@ export const drawParametricFunction = (
 };
 
 const edgesToDrawing = (edges: Edge[]): Drawing => {
-  const planeFace = (
-    drawRectangle(1000, 1000).sketchOnPlane() as Sketch
-  ).face();
+  const rectangle = drawRectangle(1000, 1000);
+  const planeSketch = rectangle.sketchOnPlane() as Sketch;
+  const planeFace = planeSketch.face();
+  planeSketch.delete();
+  rectangle.delete();
 
-  const curves = edges.map((e) => {
-    try {
-      return edgeToCurveOnPlane(e);
-    } catch (_error) {
-      return edgeToCurve(e, planeFace);
-    }
-  });
+  let curves: Curve2D[];
+  try {
+    curves = edges.map((e) => {
+      try {
+        return edgeToCurveOnPlane(e);
+      } catch (_error) {
+        return edgeToCurve(e, planeFace);
+      }
+    });
+  } finally {
+    planeFace.delete();
+  }
   const stitchedCurves = stitchCurves(curves).map((s) => new Blueprint(s));
   if (stitchedCurves.length === 0) return new Drawing();
   if (stitchedCurves.length === 1) return new Drawing(stitchedCurves[0]);
@@ -526,12 +617,22 @@ export function drawProjection(
     camera = lookFromPlane(projectionCamera);
   }
 
-  const { visible, hidden } = makeProjectedEdges(shape, camera);
+  let edges: { visible: Edge[]; hidden: Edge[] };
+  try {
+    edges = makeProjectedEdges(shape, camera);
+  } finally {
+    if (camera !== projectionCamera) camera.delete();
+  }
+  const { visible, hidden } = edges;
 
-  return {
-    visible: edgesToDrawing(visible),
-    hidden: edgesToDrawing(hidden),
-  };
+  try {
+    return {
+      visible: edgesToDrawing(visible),
+      hidden: edgesToDrawing(hidden),
+    };
+  } finally {
+    [...visible, ...hidden].forEach((edge) => edge.delete());
+  }
 }
 
 /**

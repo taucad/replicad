@@ -107,29 +107,42 @@ const downcastTo = <Entity extends TopoEntity>(
   entity: Entity
 ): TopologyMap[Entity] => definitions().downcast[entity](shape);
 
+/**
+ * Yields each distinct sub shape of `topo` kind once, in explorer order. Every
+ * yielded handle is a new one that the consumer owns and must delete (or hand
+ * to a wrapper); the iterator deletes everything else it creates, including
+ * when the consumer stops early.
+ */
 export function* iterTopo<Entity extends TopoEntity>(
   shape: TopoDS_Shape,
   topo: Entity
 ): IterableIterator<TopologyMap[Entity]> {
   const oc = getOC();
   const explorer = new oc.TopExp_Explorer(shape, asTopo(topo), asTopo("shape"));
+  // Bucket the already yielded shapes by hash so that deduplication stays
+  // linear: IsSame is only called against the (rare) hash collisions. The
+  // iterator owns these handles; the consumer gets its own copy of each.
+  const seen = new Map<number, TopoDS_Shape[]>();
   try {
-    // Bucket the already yielded shapes by hash so that deduplication stays
-    // linear: IsSame is only called against the (rare) hash collisions.
-    const seen = new Map<number, TopoDS_Shape[]>();
     while (explorer.More()) {
       const item = explorer.Current();
       const hash = oc.ReplicadShapeHasher.HashCode(item, HASH_CODE_MAX);
       const collisions = seen.get(hash);
-      if (!collisions?.some((candidate) => candidate.IsSame(item))) {
+      if (collisions?.some((candidate) => candidate.IsSame(item))) {
+        item.delete();
+      } else {
         if (collisions) collisions.push(item);
         else seen.set(hash, [item]);
-        yield downcastTo(item, topo);
+        yield topo === "shape"
+          ? (downcast(item) as TopologyMap[Entity])
+          : downcastTo(item, topo);
       }
       explorer.Next();
     }
   } finally {
     explorer.delete();
+    for (const bucket of seen.values())
+      for (const item of bucket) item.delete();
   }
 }
 

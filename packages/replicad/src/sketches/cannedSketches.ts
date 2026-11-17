@@ -12,7 +12,7 @@ import { makePlane } from "../geomHelpers";
 import Sketch from "./Sketch";
 import { Face } from "../shapes";
 import { Point2D } from "../lib2d";
-import { localGC } from "../register";
+import { ocScope } from "../register";
 import { roundedRectangleBlueprint } from "../blueprints/cannedBlueprints";
 
 export interface PlaneConfig {
@@ -34,7 +34,11 @@ export const sketchCircle = (
       ? makePlane(planeConfig.plane)
       : makePlane(planeConfig.plane, planeConfig.origin);
 
-  const wire = assembleWire([makeCircle(radius, plane.origin, plane.zDir)]);
+  const edge = makeCircle(radius, plane.origin, plane.zDir);
+
+  const wire = assembleWire([edge]);
+
+  edge.delete();
   const sketch = new Sketch(wire, {
     defaultOrigin: plane.origin,
     defaultDirection: plane.zDir,
@@ -68,9 +72,9 @@ export const sketchEllipse = (
     minR = xRadius;
   }
 
-  const wire = assembleWire([
-    makeEllipse(majR, minR, plane.origin, plane.zDir, xDir),
-  ]);
+  const edge = makeEllipse(majR, minR, plane.origin, plane.zDir, xDir);
+  const wire = assembleWire([edge]);
+  edge.delete();
   xDir.delete();
 
   const sketch = new Sketch(wire, {
@@ -205,29 +209,32 @@ export const sketchParametricFunction = (
   { pointsCount = 400, start = 0, stop = 1 } = {},
   approximationConfig: BSplineApproximationConfig = {}
 ): Sketch => {
-  const [r, gc] = localGC();
-  const plane = r(
-    planeConfig.plane instanceof Plane
-      ? makePlane(planeConfig.plane)
-      : makePlane(planeConfig.plane, planeConfig.origin)
-  );
+  const r = ocScope();
+  try {
+    const plane = r(
+      planeConfig.plane instanceof Plane
+        ? makePlane(planeConfig.plane)
+        : makePlane(planeConfig.plane, planeConfig.origin)
+    );
 
-  const stepSize = (stop - start) / pointsCount;
-  const points = [...Array(pointsCount + 1).keys()].map((t) => {
-    const point = func(start + t * stepSize);
-    return r(plane.toWorldCoords(point));
-  });
+    const stepSize = (stop - start) / pointsCount;
+    const points = [...Array(pointsCount + 1).keys()].map((t) => {
+      const point = func(start + t * stepSize);
+      return r(plane.toWorldCoords(point));
+    });
 
-  const wire = assembleWire([
-    r(makeBSplineApproximation(points, approximationConfig)),
-  ]);
+    const wire = assembleWire([
+      r(makeBSplineApproximation(points, approximationConfig)),
+    ]);
 
-  const sketch = new Sketch(wire, {
-    defaultOrigin: plane.origin,
-    defaultDirection: plane.zDir,
-  });
-  gc();
-  return sketch;
+    const sketch = new Sketch(wire, {
+      defaultOrigin: plane.origin,
+      defaultDirection: plane.zDir,
+    });
+    return sketch;
+  } finally {
+    r.dispose();
+  }
 };
 
 /**

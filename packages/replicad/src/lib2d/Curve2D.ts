@@ -6,7 +6,7 @@ import type {
 import { CurveType, findCurveType } from "../definitionMaps";
 import precisionRound from "../utils/precisionRound";
 import { getOC } from "../oclib.js";
-import { GCWithScope, localGC, WrappingObj } from "../register.js";
+import { ocScope, WrappingObj } from "../register.js";
 import zip from "../utils/zip.js";
 
 import { BoundingBox2d } from "./BoundingBox2d.js";
@@ -21,12 +21,69 @@ export function deserializeCurve2D(data: string): Curve2D {
   return new Curve2D(handle);
 }
 
+// Curves created while a capture is open (innermost last).
+const curveCaptures: Set<Curve2D>[] = [];
+
+/**
+ * @ignore Runs a 2D operation that builds curves out of `inputs` and gives
+ * its result sole ownership of the curves it holds: the intermediate curves
+ * the operation created and dropped are deleted, and a result curve that is
+ * one of the inputs is replaced by a new handle on the same geometry, so that
+ * deleting the result never deletes an input.
+ */
+export function _ownCurves<T>(
+  inputs: readonly Curve2D[],
+  run: () => T,
+  curvesOf: (result: T) => Curve2D[][]
+): T {
+  const created = new Set<Curve2D>();
+  curveCaptures.push(created);
+  let result: T;
+  try {
+    result = run();
+  } catch (error) {
+    curveCaptures.pop();
+    created.forEach((curve) => curve.delete());
+    throw error;
+  }
+  curveCaptures.pop();
+
+  const inputSet = new Set(inputs);
+  const kept = new Set<Curve2D>();
+  for (const curves of curvesOf(result)) {
+    for (let i = 0; i < curves.length; i++) {
+      let curve = curves[i];
+      if (inputSet.has(curve) || kept.has(curve)) {
+        curve = new Curve2D(
+          (curve.wrapped as unknown as { clone(): Geom2d_Curve }).clone()
+        );
+        curves[i] = curve;
+      }
+      kept.add(curve);
+    }
+  }
+  // Curves the result keeps were created by any enclosing operation too.
+  const outer = curveCaptures[curveCaptures.length - 1];
+  created.forEach((curve) => {
+    if (!kept.has(curve)) curve.delete();
+    else outer?.add(curve);
+  });
+  return result;
+}
+
 export class Curve2D extends WrappingObj<Geom2d_Curve> {
   _boundingBox: null | BoundingBox2d;
   constructor(handle: Geom2d_Curve) {
     super(handle);
 
     this._boundingBox = null;
+    curveCaptures[curveCaptures.length - 1]?.add(this);
+  }
+
+  delete(): void {
+    this._boundingBox?.delete();
+    this._boundingBox = null;
+    super.delete();
   }
 
   get boundingBox() {
@@ -100,57 +157,63 @@ export class Curve2D extends WrappingObj<Geom2d_Curve> {
 
   private distanceFromPoint(point: Point2D): number {
     const oc = getOC();
-    const r = GCWithScope();
-
-    const projector = r(
-      new oc.Geom2dAPI_ProjectPointOnCurve(r(pnt(point)), this.wrapped)
-    );
-
-    let curveToPoint = Infinity;
-
+    const r = ocScope();
     try {
-      curveToPoint = projector.LowerDistance();
-    } catch (e) {
-      curveToPoint = Infinity;
-    }
+      const projector = r(
+        new oc.Geom2dAPI_ProjectPointOnCurve(r(pnt(point)), this.wrapped)
+      );
 
-    return Math.min(
-      curveToPoint,
-      distance2d(point, this.firstPoint),
-      distance2d(point, this.lastPoint)
-    );
+      let curveToPoint = Infinity;
+
+      try {
+        curveToPoint = projector.LowerDistance();
+      } catch (e) {
+        curveToPoint = Infinity;
+      }
+
+      return Math.min(
+        curveToPoint,
+        distance2d(point, this.firstPoint),
+        distance2d(point, this.lastPoint)
+      );
+    } finally {
+      r.dispose();
+    }
   }
 
   private distanceFromCurve(curve: Curve2D): number {
     const oc = getOC();
-    const r = GCWithScope();
-
-    let curveDistance = Infinity;
-    const projector = r(
-      new oc.Geom2dAPI_ExtremaCurveCurve(
-        this.wrapped,
-        curve.wrapped,
-        this.firstParameter,
-        this.lastParameter,
-        curve.firstParameter,
-        curve.lastParameter
-      )
-    );
-
+    const r = ocScope();
     try {
-      curveDistance = projector.LowerDistance();
-    } catch (e) {
-      curveDistance = Infinity;
-    }
+      let curveDistance = Infinity;
+      const projector = r(
+        new oc.Geom2dAPI_ExtremaCurveCurve(
+          this.wrapped,
+          curve.wrapped,
+          this.firstParameter,
+          this.lastParameter,
+          curve.firstParameter,
+          curve.lastParameter
+        )
+      );
 
-    // We need to take the shorter distance between the curves and the extremities
-    return Math.min(
-      curveDistance,
-      this.distanceFromPoint(curve.firstPoint),
-      this.distanceFromPoint(curve.lastPoint),
-      curve.distanceFromPoint(this.firstPoint),
-      curve.distanceFromPoint(this.lastPoint)
-    );
+      try {
+        curveDistance = projector.LowerDistance();
+      } catch (e) {
+        curveDistance = Infinity;
+      }
+
+      // We need to take the shorter distance between the curves and the extremities
+      return Math.min(
+        curveDistance,
+        this.distanceFromPoint(curve.firstPoint),
+        this.distanceFromPoint(curve.lastPoint),
+        curve.distanceFromPoint(this.firstPoint),
+        curve.distanceFromPoint(this.lastPoint)
+      );
+    } finally {
+      r.dispose();
+    }
   }
 
   distanceFrom(element: Curve2D | Point2D): number {
@@ -167,132 +230,140 @@ export class Curve2D extends WrappingObj<Geom2d_Curve> {
 
   parameter(point: Point2D, precision = 1e-9): number {
     const oc = getOC();
-    const r = GCWithScope();
-
-    let lowerDistance;
-    let lowerDistanceParameter;
+    const r = ocScope();
     try {
-      const projector = r(
-        new oc.Geom2dAPI_ProjectPointOnCurve(r(pnt(point)), this.wrapped)
-      );
-      lowerDistance = projector.LowerDistance();
-      lowerDistanceParameter = projector.LowerDistanceParameter();
-    } catch (e) {
-      // Perhaps it failed because it is on an extremity
-      if (samePoint(point, this.firstPoint, precision))
-        return this.firstParameter;
-      if (samePoint(point, this.lastPoint, precision))
-        return this.lastParameter;
+      let lowerDistance;
+      let lowerDistanceParameter;
+      try {
+        const projector = r(
+          new oc.Geom2dAPI_ProjectPointOnCurve(r(pnt(point)), this.wrapped)
+        );
+        lowerDistance = projector.LowerDistance();
+        lowerDistanceParameter = projector.LowerDistanceParameter();
+      } catch (e) {
+        // Perhaps it failed because it is on an extremity
+        if (samePoint(point, this.firstPoint, precision))
+          return this.firstParameter;
+        if (samePoint(point, this.lastPoint, precision))
+          return this.lastParameter;
 
-      throw new Error("Failed to find parameter");
-    }
+        throw new Error("Failed to find parameter");
+      }
 
-    if (lowerDistance > precision) {
-      throw new Error(
-        `Point ${reprPnt(point)} not on curve ${
-          this.repr
-        }, ${lowerDistance.toFixed(9)}`
-      );
+      if (lowerDistance > precision) {
+        throw new Error(
+          `Point ${reprPnt(point)} not on curve ${
+            this.repr
+          }, ${lowerDistance.toFixed(9)}`
+        );
+      }
+      return lowerDistanceParameter;
+    } finally {
+      r.dispose();
     }
-    return lowerDistanceParameter;
   }
 
   tangentAt(index: number | Point2D): Point2D {
     const oc = getOC();
-    const [r, gc] = localGC();
+    const r = ocScope();
+    try {
+      let param;
 
-    let param;
+      if (Array.isArray(index)) {
+        param = this.parameter(index);
+      } else {
+        const paramLength =
+          this.innerCurve.LastParameter() - this.innerCurve.FirstParameter();
+        param = paramLength * index + this.innerCurve.FirstParameter();
+      }
 
-    if (Array.isArray(index)) {
-      param = this.parameter(index);
-    } else {
-      const paramLength =
-        this.innerCurve.LastParameter() - this.innerCurve.FirstParameter();
-      param = paramLength * index + this.innerCurve.FirstParameter();
+      const point = r(new oc.gp_Pnt2d());
+      const dir = r(new oc.gp_Vec2d());
+
+      this.innerCurve.D1(param, point, dir);
+
+      const tgtVec = [dir.X(), dir.Y()] as Point2D;
+
+      return tgtVec;
+    } finally {
+      r.dispose();
     }
-
-    const point = r(new oc.gp_Pnt2d());
-    const dir = r(new oc.gp_Vec2d());
-
-    this.innerCurve.D1(param, point, dir);
-
-    const tgtVec = [dir.X(), dir.Y()] as Point2D;
-    gc();
-
-    return tgtVec;
   }
 
   splitAt(points: Point2D[] | number[], precision = 1e-9): Curve2D[] {
     const oc = getOC();
-    const r = GCWithScope();
+    const r = ocScope();
+    try {
+      let parameters = points.map((point: Point2D | number) => {
+        if (isPoint2D(point)) return this.parameter(point, precision);
+        return point;
+      });
 
-    let parameters = points.map((point: Point2D | number) => {
-      if (isPoint2D(point)) return this.parameter(point, precision);
-      return point;
-    });
+      // We only split on each point once
+      parameters = Array.from(
+        new Map(
+          parameters.map((p) => [precisionRound(p, -Math.log10(precision)), p])
+        ).values()
+      ).sort((a, b) => a - b);
+      const firstParam = this.firstParameter;
+      const lastParam = this.lastParameter;
 
-    // We only split on each point once
-    parameters = Array.from(
-      new Map(
-        parameters.map((p) => [precisionRound(p, -Math.log10(precision)), p])
-      ).values()
-    ).sort((a, b) => a - b);
-    const firstParam = this.firstParameter;
-    const lastParam = this.lastParameter;
-
-    if (firstParam > lastParam) {
-      parameters.reverse();
-    }
-
-    // We do not split again on the start and end
-    if (Math.abs(parameters[0] - firstParam) < precision * 100)
-      parameters = parameters.slice(1);
-    if (!parameters.length) return [this];
-
-    if (
-      Math.abs(parameters[parameters.length - 1] - lastParam) <
-      precision * 100
-    )
-      parameters = parameters.slice(0, -1);
-    if (!parameters.length) return [this];
-
-    return zip([
-      [firstParam, ...parameters],
-      [...parameters, lastParam],
-    ]).map(([first, last]) => {
-      try {
-        if (this.geomType === "BEZIER_CURVE") {
-          const curveCopy = new oc.Geom2d_BezierCurve(
-            r(this.adaptor()).Bezier().Poles()
-          );
-          curveCopy.Segment(first, last);
-          return new Curve2D(curveCopy);
-        }
-        if (this.geomType === "BSPLINE_CURVE") {
-          const adapted = r(this.adaptor()).BSpline();
-
-          const curveCopy = new oc.Geom2d_BSplineCurve(
-            adapted.Poles(),
-            adapted.Knots(),
-            adapted.Multiplicities(),
-            adapted.Degree(),
-            adapted.IsPeriodic()
-          );
-          curveCopy.Segment(first, last, precision);
-          return new Curve2D(curveCopy);
-        }
-
-        const trimmed = new oc.Geom2d_TrimmedCurve(
-          this.wrapped,
-          first,
-          last,
-          true,
-          true
-        );
-        return new Curve2D(trimmed);
-      } catch (e) {
-        throw new Error("Failed to split the curve");
+      if (firstParam > lastParam) {
+        parameters.reverse();
       }
-    });
+
+      // We do not split again on the start and end
+      if (Math.abs(parameters[0] - firstParam) < precision * 100)
+        parameters = parameters.slice(1);
+      if (!parameters.length) return [this];
+
+      if (
+        Math.abs(parameters[parameters.length - 1] - lastParam) <
+        precision * 100
+      )
+        parameters = parameters.slice(0, -1);
+      if (!parameters.length) return [this];
+
+      return zip([
+        [firstParam, ...parameters],
+        [...parameters, lastParam],
+      ]).map(([first, last]) => {
+        try {
+          if (this.geomType === "BEZIER_CURVE") {
+            const curveCopy = new oc.Geom2d_BezierCurve(
+              r(this.adaptor()).Bezier().Poles()
+            );
+            curveCopy.Segment(first, last);
+            return new Curve2D(curveCopy);
+          }
+          if (this.geomType === "BSPLINE_CURVE") {
+            const adapted = r(this.adaptor()).BSpline();
+
+            const curveCopy = new oc.Geom2d_BSplineCurve(
+              adapted.Poles(),
+              adapted.Knots(),
+              adapted.Multiplicities(),
+              adapted.Degree(),
+              adapted.IsPeriodic()
+            );
+            curveCopy.Segment(first, last, precision);
+            return new Curve2D(curveCopy);
+          }
+
+          const trimmed = new oc.Geom2d_TrimmedCurve(
+            this.wrapped,
+            first,
+            last,
+            true,
+            true
+          );
+          return new Curve2D(trimmed);
+        } catch (e) {
+          throw new Error("Failed to split the curve");
+        }
+      });
+    } finally {
+      r.dispose();
+    }
   }
 }

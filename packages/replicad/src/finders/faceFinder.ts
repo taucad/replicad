@@ -14,6 +14,7 @@ export class FaceFinder extends Finder3d<Face> {
   clone(): FaceFinder {
     const ff = new FaceFinder();
     ff.filters = [...this.filters];
+    this._shareResourcesWith(ff);
     return ff;
   }
 
@@ -30,7 +31,7 @@ export class FaceFinder extends Finder3d<Face> {
     if (typeof plane !== "string" && plane instanceof Plane)
       return this.atAngleWith(plane.zDir);
     if (typeof plane !== "string" && plane.normalAt) {
-      const normal = plane.normalAt();
+      const normal = this._own(plane.normalAt());
       this.atAngleWith(normal);
       return this;
     }
@@ -58,10 +59,11 @@ export class FaceFinder extends Finder3d<Face> {
    * @category Filter
    */
   inPlane(inputPlane: PlaneName | Plane, origin?: Point | number): this {
-    const plane =
+    const plane = this._own(
       inputPlane instanceof Plane
         ? makePlane(inputPlane)
-        : makePlane(inputPlane, origin);
+        : makePlane(inputPlane, origin)
+    );
 
     this.parallelTo(plane);
 
@@ -70,6 +72,8 @@ export class FaceFinder extends Finder3d<Face> {
       const projectedPoint = point.projectToPlane(plane);
 
       const isSamePoint = point.equals(projectedPoint);
+      point.delete();
+      projectedPoint.delete();
       return isSamePoint;
     };
 
@@ -79,15 +83,17 @@ export class FaceFinder extends Finder3d<Face> {
 
   shouldKeep(element: Face): boolean {
     const normal = element.normalAt();
-    const shouldKeep = this.filters.every((filter) =>
-      filter({ normal, element })
-    );
-    return shouldKeep;
+    try {
+      return this.filters.every((filter) => filter({ normal, element }));
+    } finally {
+      normal.delete();
+    }
   }
 
   protected applyFilter(shape: AnyShape): Face[] {
     return shape.faces.filter((face: Face) => {
       const shouldKeep = this.shouldKeep(face);
+      if (!shouldKeep) face.delete();
       return shouldKeep;
     });
   }
