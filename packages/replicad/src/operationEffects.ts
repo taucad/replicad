@@ -417,9 +417,10 @@ export const classEffects = (): readonly ClassEffects[] => [
     op: "Vector",
     routed: false,
     members: members({
-      pure: "repr x y z Length toTuple cross dot sub add multiply normalized getAngle projectToPlane equals toPnt toDir",
+      pure: "wrapped repr x y z Length toTuple cross dot sub add multiply normalized getAngle projectToPlane equals toPnt toDir",
       alias: "getCenter",
-      mutates: "normalize rotate",
+      mutates: "set:wrapped normalize rotate",
+      consumes: "delete",
     }),
   },
   {

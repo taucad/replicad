@@ -100,53 +100,94 @@ export const makeAx1 = (center: Point, dir: Direction): gp_Ax1 => {
   return axis;
 };
 
-/** A new `gp_Vec` from an OpenCascade value with `XYZ()`, deleting the copy. */
-const vecFromXYZ = (value: { XYZ: () => gp_XYZ }): gp_Vec => {
-  const xyz = value.XYZ();
-  try {
-    return new (getOC().gp_Vec)(xyz);
-  } finally {
-    xyz.delete();
+/** The coordinates of a point given in any accepted form. */
+const coordinatesOf = (point: Point): SimplePoint => {
+  if (Array.isArray(point)) {
+    if (point.length === 3) return [point[0], point[1], point[2]];
+    if (point.length === 2) return [point[0], point[1], 0];
+  } else if (point instanceof Vector) {
+    return point.toTuple();
+  } else if (typeof point.XYZ === "function") {
+    const xyz = point.XYZ();
+    try {
+      return [xyz.X(), xyz.Y(), xyz.Z()];
+    } finally {
+      xyz.delete();
+    }
   }
+  return [0, 0, 0];
 };
 
-const makeVec = (vector: Point = [0, 0, 0]): gp_Vec => {
-  const oc = getOC();
+const wrappedAccessor = Object.getOwnPropertyDescriptor(
+  WrappingObj.prototype,
+  "wrapped"
+)!;
 
-  if (Array.isArray(vector)) {
-    if (vector.length === 3) return new oc.gp_Vec(...vector);
-    else if (vector.length === 2) return new oc.gp_Vec(...vector, 0);
-  } else if (vector instanceof Vector) {
-    return vecFromXYZ(vector.wrapped);
-  } else if (typeof vector.XYZ === "function") return vecFromXYZ(vector);
-  return new oc.gp_Vec(0, 0, 0);
-};
-
-// A fresh `gp_Vec` the next Vector adopts instead of copying its argument.
-let adoptedVec: gp_Vec | null = null;
-const takeAdoptedVec = (): gp_Vec | null => {
-  const vec = adoptedVec;
-  adoptedVec = null;
-  return vec;
-};
-
-/** Wraps a `gp_Vec` an OpenCascade call just returned, without copying it. */
-const adoptVec = (vec: gp_Vec): Vector => {
-  adoptedVec = vec;
-  try {
-    return new Vector();
-  } finally {
-    adoptedVec = null;
-  }
-};
-
+/**
+ * A 3D vector. Its coordinates and arithmetic are plain JavaScript numbers,
+ * computed with the same operations, in the same order, as OpenCascade's
+ * `gp_Vec`, so the results are the same to the bit. Rotations, angles and
+ * comparisons still run in OpenCascade.
+ *
+ * `wrapped` creates a `gp_Vec` the first time OpenCascade code needs one; the
+ * vector owns it and deletes it with itself (or when its coordinates
+ * change). Change a vector through its methods, not through `wrapped`.
+ */
 export class Vector extends WrappingObj<gp_Vec> {
-  /**
-   * A new vector holding a copy of `vector`'s coordinates: the caller keeps
-   * ownership of an OpenCascade value it passes.
-   */
+  private _x: number;
+  private _y: number;
+  private _z: number;
+  private _alive = true;
+
+  /** A new vector holding a copy of `vector`'s coordinates. */
   constructor(vector: Point = [0, 0, 0]) {
-    super(takeAdoptedVec() ?? makeVec(vector));
+    super(null as unknown as gp_Vec);
+    [this._x, this._y, this._z] = coordinatesOf(vector);
+  }
+
+  private _check(): void {
+    if (!this._alive) throw new Error("This object has been deleted");
+  }
+
+  /** Forgets the materialized `gp_Vec` after the coordinates changed. */
+  private _changed(): void {
+    wrappedAccessor.set!.call(this, null);
+  }
+
+  private _set(x: number, y: number, z: number): this {
+    this._x = x;
+    this._y = y;
+    this._z = z;
+    this._changed();
+    return this;
+  }
+
+  /** A temporary `gp_Vec` for an OpenCascade computation. */
+  private _vec(): gp_Vec {
+    return new this.oc.gp_Vec(this._x, this._y, this._z);
+  }
+
+  get wrapped(): gp_Vec {
+    this._check();
+    const vec = (this as unknown as { _wrapped: gp_Vec | null })._wrapped;
+    if (vec) return vec;
+    const created = this._vec();
+    wrappedAccessor.set!.call(this, created);
+    return created;
+  }
+
+  set wrapped(newWrapped: gp_Vec) {
+    this._check();
+    const [x, y, z] = [newWrapped.X(), newWrapped.Y(), newWrapped.Z()];
+    wrappedAccessor.set!.call(this, newWrapped);
+    this._x = x;
+    this._y = y;
+    this._z = z;
+  }
+
+  delete(): void {
+    this._alive = false;
+    super.delete();
   }
 
   get repr(): string {
@@ -154,52 +195,81 @@ export class Vector extends WrappingObj<gp_Vec> {
   }
 
   get x(): number {
-    return this.wrapped.X();
+    this._check();
+    return this._x;
   }
 
   get y(): number {
-    return this.wrapped.Y();
+    this._check();
+    return this._y;
   }
 
   get z(): number {
-    return this.wrapped.Z();
+    this._check();
+    return this._z;
   }
 
+  /** As `gp_Vec::Magnitude`. */
   get Length(): number {
-    return this.wrapped.Magnitude();
+    this._check();
+    return Math.sqrt(this._x * this._x + this._y * this._y + this._z * this._z);
   }
 
   toTuple(): [number, number, number] {
-    return [this.x, this.y, this.z];
+    this._check();
+    return [this._x, this._y, this._z];
   }
 
+  /** As `gp_Vec::Crossed`. */
   cross(v: Vector): Vector {
-    return adoptVec(this.wrapped.Crossed(v.wrapped));
+    const [x, y, z] = this.toTuple();
+    const [vx, vy, vz] = v.toTuple();
+    return new Vector([y * vz - z * vy, z * vx - x * vz, x * vy - y * vx]);
   }
 
+  /** As `gp_Vec::Dot`. */
   dot(v: Vector): number {
-    return this.wrapped.Dot(v.wrapped);
+    const [x, y, z] = this.toTuple();
+    const [vx, vy, vz] = v.toTuple();
+    return x * vx + y * vy + z * vz;
   }
 
   sub(v: Vector): Vector {
-    return adoptVec(this.wrapped.Subtracted(v.wrapped));
+    const [x, y, z] = this.toTuple();
+    const [vx, vy, vz] = v.toTuple();
+    return new Vector([x - vx, y - vy, z - vz]);
   }
 
   add(v: Vector): Vector {
-    return adoptVec(this.wrapped.Added(v.wrapped));
+    const [x, y, z] = this.toTuple();
+    const [vx, vy, vz] = v.toTuple();
+    return new Vector([x + vx, y + vy, z + vz]);
   }
 
   multiply(scale: number): Vector {
-    return adoptVec(this.wrapped.Multiplied(scale));
+    const [x, y, z] = this.toTuple();
+    return new Vector([x * scale, y * scale, z * scale]);
   }
 
+  /** As `gp_Vec::Normalized`: each coordinate divided by the magnitude. */
   normalized(): Vector {
-    return adoptVec(this.wrapped.Normalized());
+    const length = this._normalizingLength();
+    return new Vector([this._x / length, this._y / length, this._z / length]);
   }
 
+  /** As `gp_Vec::Normalize`. */
   normalize(): Vector {
-    this.wrapped.Normalize();
-    return this;
+    const length = this._normalizingLength();
+    return this._set(this._x / length, this._y / length, this._z / length);
+  }
+
+  private _normalizingLength(): number {
+    const length = this.Length;
+    // gp::Resolution() (the smallest normal double), at or below which
+    // OpenCascade refuses to normalize.
+    if (length <= 2 ** -1022)
+      throw new Error("Cannot normalize a vector with a zero norm");
+    return length;
   }
 
   getCenter(): Vector {
@@ -207,7 +277,13 @@ export class Vector extends WrappingObj<gp_Vec> {
   }
 
   getAngle(v: Vector): number {
-    return this.wrapped.Angle(v.wrapped) * RAD2DEG;
+    const [a, b] = [this._vec(), v._vec()];
+    try {
+      return a.Angle(b) * RAD2DEG;
+    } finally {
+      a.delete();
+      b.delete();
+    }
   }
 
   projectToPlane(plane: Plane): Vector {
@@ -224,26 +300,26 @@ export class Vector extends WrappingObj<gp_Vec> {
 
     return projection;
   }
+
   equals(other: Vector): boolean {
-    return this.wrapped.IsEqual(other.wrapped, 0.00001, 0.00001);
+    this._check();
+    const [a, b] = [this._vec(), other._vec()];
+    try {
+      return a.IsEqual(b, 0.00001, 0.00001);
+    } finally {
+      a.delete();
+      b.delete();
+    }
   }
 
   toPnt(): gp_Pnt {
-    const xyz = this.wrapped.XYZ();
-    try {
-      return new this.oc.gp_Pnt(xyz);
-    } finally {
-      xyz.delete();
-    }
+    this._check();
+    return new this.oc.gp_Pnt(this._x, this._y, this._z);
   }
 
   toDir(): gp_Dir {
-    const xyz = this.wrapped.XYZ();
-    try {
-      return new this.oc.gp_Dir(xyz);
-    } finally {
-      xyz.delete();
-    }
+    this._check();
+    return new this.oc.gp_Dir(this._x, this._y, this._z);
   }
 
   rotate(
@@ -251,10 +327,16 @@ export class Vector extends WrappingObj<gp_Vec> {
     center: Point = [0, 0, 0],
     direction: Direction = [0, 0, 1]
   ): Vector {
+    this._check();
     const ax = makeAx1(center, direction);
-    this.wrapped.Rotate(ax, angle * DEG2RAD);
-    ax.delete();
-    return this;
+    const vec = this._vec();
+    try {
+      vec.Rotate(ax, angle * DEG2RAD);
+      return this._set(vec.X(), vec.Y(), vec.Z());
+    } finally {
+      vec.delete();
+      ax.delete();
+    }
   }
 }
 
@@ -295,17 +377,11 @@ export function makeDirVector(direction: Direction): Vector {
 }
 
 export function asPnt(coords: Point): gp_Pnt {
-  const v = new Vector(coords);
-  const pnt = v.toPnt();
-  v.delete();
-  return pnt;
+  return new (getOC().gp_Pnt)(...coordinatesOf(coords));
 }
 
 export function asDir(direction: Direction): gp_Dir {
-  const v = makeDirVector(direction);
-  const dir = v.toDir();
-  v.delete();
-  return dir;
+  return new (getOC().gp_Dir)(...coordinatesOf(resolveDirection(direction)));
 }
 
 type CoordSystem =
