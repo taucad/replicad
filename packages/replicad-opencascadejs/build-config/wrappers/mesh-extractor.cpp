@@ -11,6 +11,8 @@
 // repeated faces in aggregate topology are observable output occurrences.
 
 #include <BRepAdaptor_Surface.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include <IMeshTools_Parameters.hxx>
 #include <BRepLProp_SLProps.hxx>
 #include <OSD_ThreadPool.hxx>
 #include <Precision.hxx>
@@ -249,6 +251,57 @@ public:
     bool skipNormals
   ) {
     mesh(shape, tolerance, angularTolerance);
+    return ReplicadExtractFaceMesh<ReplicadMeshData>(shape, skipNormals);
+  }
+
+  // `mesh` with the clean made explicit and an optional user break.
+  //   clean     : true is `mesh` (drop every cached triangulation first);
+  //               false keeps the shape's triangulation, so OCCT re-meshes
+  //               only faces that have none or a coarser one than requested.
+  //   userBreak : a disabled `ReplicadUserBreak` attaches no progress
+  //               indicator. A break throws `ReplicadUserBreakError` and may
+  //               leave some faces meshed and others not.
+  static void meshWithOptions(
+    const TopoDS_Shape& shape,
+    double tolerance,
+    double angularTolerance,
+    bool clean,
+    const ReplicadUserBreak& userBreak
+  ) {
+    if (clean) BRepTools::Clean(shape, false);
+    Handle(ReplicadUserBreakIndicator) indicator =
+      ReplicadMakeUserBreakIndicator(userBreak);
+    if (indicator.IsNull()) {
+      BRepMesh_IncrementalMesh mesher(
+        shape,
+        tolerance,
+        false,
+        angularTolerance,
+        ReplicadConfigureThreadPool() > 1);
+      return;
+    }
+
+    IMeshTools_Parameters parameters;
+    parameters.Deflection = tolerance;
+    parameters.Angle = angularTolerance;
+    parameters.Relative = false;
+    parameters.InParallel = ReplicadConfigureThreadPool() > 1;
+    BRepMesh_IncrementalMesh mesher(shape, parameters, indicator->Start());
+    if (indicator->WasBroken()) throw ReplicadUserBreakError();
+  }
+
+  // `extract` with the clean made explicit and an optional user break; see
+  // `meshWithOptions`. With clean=true and a disabled break it returns the
+  // same data as `extract`.
+  static ReplicadMeshData extractWithOptions(
+    const TopoDS_Shape& shape,
+    double tolerance,
+    double angularTolerance,
+    bool skipNormals,
+    bool clean,
+    const ReplicadUserBreak& userBreak
+  ) {
+    meshWithOptions(shape, tolerance, angularTolerance, clean, userBreak);
     return ReplicadExtractFaceMesh<ReplicadMeshData>(shape, skipNormals);
   }
 };
