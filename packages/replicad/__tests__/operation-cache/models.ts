@@ -64,18 +64,29 @@ export const callbackClosure = (p: {
   return [box, pipe, tab];
 };
 
+/**
+ * Whether a value, or a kernel handle it holds, has been deleted: shapes and
+ * wrappers through their handle, sketches through their wire, drawings and
+ * blueprints through their curves, groups through their members.
+ */
 export const isDeleted = (value: any): boolean => {
+  if (value === null || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(isDeleted);
   try {
-    if (value.wrapped) value.wrapped.IsNull();
-    else if (value.wire) value.wire.wrapped.IsNull();
-    else if (value.sketches) value.sketches.forEach(isDeletedOrThrow);
+    if (typeof value.isDeleted === "function") return value.isDeleted();
+    if ("_wrapped" in value || "wrapped" in value) {
+      const handle = value.wrapped; // throws once the wrapper is deleted
+      return typeof handle?.isDeleted === "function" ? handle.isDeleted() : false;
+    }
+    if ("wire" in value) return isDeleted(value.wire);
+    if ("sketches" in value) return value.sketches.some(isDeleted);
+    if ("innerShape" in value) return isDeleted(value.innerShape);
+    if ("curves" in value) return value.curves.some(isDeleted);
+    if ("blueprints" in value) return value.blueprints.some(isDeleted);
     return false;
   } catch {
     return true;
   }
-};
-const isDeletedOrThrow = (value: any) => {
-  if (isDeleted(value)) throw new Error("deleted");
 };
 
 /**

@@ -148,12 +148,46 @@ describe("I4 surface enumeration", () => {
 
   test("routed functions are exported routed, under their own name", () => {
     for (const name of ROUTED_FUNCTION_NAMES) {
-      expect(functionEffects[name], name).toEqual({
-        effect: "pure",
-        routed: true,
-      });
-      expect(typeof (replicad as any)[name], name).toBe("function");
+      expect(functionEffects[name].routed, name).toBe(true);
+      const exported = (replicad as any)[name];
+      expect(typeof exported, name).toBe("function");
     }
+  });
+
+  test("routed exports keep the implementation's name, arity and JSDoc", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = (path: string) =>
+      readFileSync(resolve(import.meta.dirname, "../../src", path), "utf8");
+    const index = src("index.ts");
+    const modules: Record<string, string> = {};
+    for (const [, alias, path] of index.matchAll(
+      /^import type \* as (\w+) from "\.\/([\w/]+)";$/gm
+    ))
+      modules[alias] = src(`${path}.ts`);
+    const docBefore = (text: string, at: number): string | undefined =>
+      /(\/\*\*(?:(?!\*\/)[\s\S])*?\*\/)\s*$/.exec(text.slice(0, at))?.[1];
+    for (const name of ROUTED_FUNCTION_NAMES) {
+      const exported = (replicad as any)[name];
+      const line = new RegExp(
+        `^export const ${name}: typeof (\\w+)\\.${name} = routedFunctions\\.${name};$`,
+        "m"
+      ).exec(index);
+      expect(line, name).not.toBeNull();
+      const module = modules[line![1]];
+      const declaration = new RegExp(
+        `^(?:export )?(?:const|function|async function) ${name}\\b`,
+        "m"
+      ).exec(module)!;
+      expect(docBefore(index, line!.index), name).toBe(
+        docBefore(module, declaration.index)
+      );
+      expect(exported.name, name).not.toBe("");
+      expect(exported.length, name).toBeGreaterThanOrEqual(0);
+    }
+    expect(replicad.makeBox.name).toBe("makeBox");
+    expect(replicad.makeBox.length).toBe(2);
+    expect(replicad.makeCylinder.length).toBe(2);
   });
 
   test("every finder clause is described as a value, combinator or predicate clause", () => {
@@ -343,6 +377,34 @@ const consumptionCases: Record<string, Case> = {
       run: () => sketches.revolve(),
     };
   },
+  compoundShapes: () => {
+    const a = makeBaseBox(4, 4, 4);
+    const b = makeBox([10, 0, 0], [12, 2, 2]);
+    return { values: [a, b], run: () => replicad.compoundShapes([a, b]) };
+  },
+  makeCompound: () => {
+    const a = makeBaseBox(4, 4, 4);
+    const b = makeBox([10, 0, 0], [12, 2, 2]);
+    return { values: [a, b], run: () => replicad.makeCompound([a, b]) };
+  },
+  sketchFaceOffset: () => {
+    const face = compound().face();
+    return { values: [face], run: () => replicad.sketchFaceOffset(face, 1) };
+  },
+  "CompoundSketch.wires": () => {
+    const sketch = compound();
+    return { values: [sketch], run: () => sketch.wires };
+  },
+  "Sketches.wires": () => {
+    const sketches = drawRectangle(10, 10)
+      .cut(drawCircle(2))
+      .fuse(drawCircle(3).translate(20, 0))
+      .sketchOnPlane() as any;
+    return {
+      values: [...sketches.sketches, sketches],
+      run: () => sketches.wires(),
+    };
+  },
   "Drawing.sketchOnPlane (pure control)": () => {
     const drawing = drawCircle(3);
     return { values: [drawing], run: () => drawing.sketchOnPlane() };
@@ -353,7 +415,17 @@ const deletionState = (values: object[]): boolean[] =>
   bypassOperationCache(() => values.map(isDeleted));
 
 describe("G-E8 consumption per member", () => {
-  test("the cases cover every routed consuming member", () => {
+  test("the cases cover every routed consuming member and function", () => {
+    const consumingFunctions = Object.entries(functionEffects)
+      .filter(([, { effect, routed }]) => routed && effect === "consumes")
+      .map(([name]) => name);
+    expect(consumingFunctions.sort()).toEqual([
+      "compoundShapes",
+      "makeCompound",
+      "sketchFaceOffset",
+    ]);
+    for (const name of consumingFunctions)
+      expect(Object.keys(consumptionCases), name).toContain(name);
     const consuming = classEffects()
       .filter((entry) => entry.routed)
       .flatMap((entry) =>

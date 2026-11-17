@@ -6,6 +6,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   bypassOperationCache,
+  drawCircle,
+  drawRectangle,
   getOC,
   importSTEP,
   importSTL,
@@ -119,6 +121,30 @@ describe("negative results keep class and message on hit and miss", () => {
     expect(qualifiesNegative(new Error("out of memory"))).toBe(false);
     expect(qualifiesNegative(new Error("Could not fillet as a 3d shape"))).toBe(true);
     expect(qualifiesNegative(thrown(failures.fillet))).toBe(true);
+  });
+});
+
+describe("G-E8 a consumed value fails the same way on a hit", () => {
+  test("G-E8 Sketches.wires() then extrude throws identically with no cache, a cold cache and a revisit", () => {
+    const model = () => {
+      const s = drawRectangle(10, 10)
+        .fuse(drawCircle(2).translate(20, 0))
+        .sketchOnPlane() as any;
+      s.wires();
+      return s.extrude(5);
+    };
+    const off = describeError(thrown(model));
+    const cache = createTestCache();
+    setOperationCache(cache.cache);
+    const runs = [0, 1].map(() => {
+      cache.beginBuild();
+      return describeError(thrown(model));
+    });
+    expect(cache.stats.hits).toBeGreaterThan(0);
+    setOperationCache(undefined);
+    cache.dispose();
+    expect(runs[0], "cold").toEqual(off);
+    expect(runs[1], "revisit").toEqual(off);
   });
 });
 

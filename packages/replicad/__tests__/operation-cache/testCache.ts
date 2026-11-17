@@ -141,6 +141,7 @@ export function createTestCache(options: TestCacheOptions = {}) {
         value instanceof CompoundSketch ||
         value instanceof Sketches;
   const cloneValue = (value: any): any => {
+    if (value === null || value === undefined) return value;
     if (Array.isArray(value)) return value.map(cloneValue);
     if (value instanceof CompoundSketch)
       return new CompoundSketch(value.sketches.map(cloneValue));
@@ -406,6 +407,17 @@ export function createTestCache(options: TestCacheOptions = {}) {
         const result = run(request.op, frame, () => request.compute());
         if (frame.stepKey !== undefined) assign(result, frame.stepKey);
         else if (request.effect !== "pure") forget(request.receiver);
+        return result;
+      }
+      if (request.returnsBuilder) {
+        // A builder is mutated by later calls: never reused, so its
+        // identity is this call's and it is computed every time.
+        const key = intern(recipe);
+        const result = run(request.op, { partial: recipe, pending: false }, () =>
+          request.compute()
+        );
+        stats.transient += 1;
+        assign(result, key);
         return result;
       }
       const key = intern(recipe);

@@ -13,6 +13,7 @@ import {
 } from "../../src/index";
 import * as shapeHelpers from "../../src/shapeHelpers";
 import { classEffects, ROUTED_FUNCTION_NAMES } from "../../src/operationEffects";
+import { routeFunction } from "../../src/operationCache";
 import { corpus, deleteAll, finderClosure } from "./models";
 import { createTestCache } from "./testCache";
 
@@ -189,6 +190,95 @@ describe("I2 / G-E6 zero hook work when off", () => {
     expect(box.boundingBox.bounds).toEqual(direct.boundingBox.bounds);
     expect(box.constructor).toBe(direct.constructor);
     deleteAll([box, direct]);
+  });
+});
+
+describe("I2 free functions off", () => {
+  test("I2 with no cache a routed function forwards this and the arguments, copying nothing", () => {
+    const seen: { self: unknown; args: unknown[] }[] = [];
+    const implementation = function (this: unknown, ...args: unknown[]) {
+      seen.push({ self: this, args });
+      return args.length;
+    };
+    const routed = routeFunction("probe", implementation);
+    const receiver = {};
+    const argument = { value: 1 };
+    // Spy on the copies a routed call could make of its arguments.
+    const slice = vi.spyOn(Array.prototype, "slice");
+    const from = vi.spyOn(Array, "from");
+    try {
+      expect(routed.call(receiver, argument, undefined)).toBe(2);
+      expect(slice).not.toHaveBeenCalled();
+      expect(from).not.toHaveBeenCalled();
+    } finally {
+      slice.mockRestore();
+      from.mockRestore();
+    }
+    expect(seen[0].self).toBe(receiver);
+    expect(seen[0].args[0]).toBe(argument);
+    // The no-cache branch comes before any copy or request in the wrapper.
+    const source = Function.prototype.toString.call(routed);
+    const off = source.indexOf("apply(this, arguments");
+    expect(off).toBeGreaterThan(0);
+    for (const later of ["slice", "...", "_runOperation", "args"])
+      if (source.includes(later))
+        expect(source.indexOf(later), later).toBeGreaterThan(off);
+  });
+
+  test("I2 routed exports keep name and arity", () => {
+    const routed = routeFunction("probe", function probe(a: number, b: number) {
+      return a + b;
+    });
+    expect(routed.name).toBe("probe");
+    expect(routed.length).toBe(2);
+  });
+});
+
+describe("cache installation", () => {
+  test("the cache cannot be changed while an operation runs", () => {
+    const first = passThrough();
+    const second = passThrough();
+    setOperationCache(first);
+    let attempted: unknown;
+    first.operation = function <T>(request: OperationRequest<T>): T {
+      first.requests.push(request.op);
+      return request.compute();
+    };
+    // Library-internal work (inside an operation, or a cache's bypassed
+    // calls) runs at depth 1.
+    expect(() =>
+      replicad.bypassOperationCache(() => setOperationCache(second))
+    ).toThrow(/cannot be changed while an operation runs/);
+    try {
+      replicad.bypassOperationCache(() => setOperationCache(undefined));
+    } catch (error) {
+      attempted = error;
+    }
+    expect(String(attempted)).toMatch(/while an operation runs/);
+    expect(getOperationCache()).toBe(first);
+    // Back at the top level: routed calls reach the cache and it can change.
+    deleteAll([replicad.makeBaseBox(1, 1, 1)]);
+    expect(first.requests).toEqual(["makeBaseBox"]);
+    expect(setOperationCache(second)).toBe(first);
+    deleteAll([replicad.makeBaseBox(1, 1, 1)]);
+    expect(second.requests).toEqual(["makeBaseBox"]);
+  });
+
+  test("draw() is flagged as returning a builder", () => {
+    const seen: OperationRequest<unknown>[] = [];
+    setOperationCache({
+      operation<T>(request: OperationRequest<T>): T {
+        seen.push(request as OperationRequest<unknown>);
+        return request.compute();
+      },
+      step: (request) => request.compute(),
+      elements: () => undefined,
+    });
+    replicad.draw().hLine(1).vLine(1).close();
+    replicad.drawCircle(1);
+    setOperationCache(undefined);
+    const builders = seen.filter((request) => request.returnsBuilder).map((r) => r.op);
+    expect(builders).toEqual(["draw"]);
   });
 });
 
