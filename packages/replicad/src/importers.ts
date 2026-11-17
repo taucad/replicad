@@ -3,6 +3,7 @@ import { getOC } from "./oclib";
 import { localGC } from "./register";
 import { MeshShape } from "./meshShapes";
 import { getManifold } from "./manifoldlib";
+import { _runOperation, getOperationCache } from "./operationCacheHook";
 
 const uniqueId = () =>
   Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -13,11 +14,23 @@ const uniqueId = () =>
  * @category Import
  */
 export async function importSTEP(STLBlob: Blob) {
+  const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
+  if (!getOperationCache()) return readSTEP(bufferView);
+  // Routed on the file's content, once it has been read.
+  return _runOperation({
+    op: "importSTEP",
+    effect: "pure",
+    receiver: undefined,
+    args: [bufferView],
+    compute: () => readSTEP(bufferView),
+  });
+}
+
+function readSTEP(bufferView: Uint8Array) {
   const oc = getOC();
   const [r, gc] = localGC();
 
   const fileName = uniqueId();
-  const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
   oc.FS.writeFile(`/${fileName}`, bufferView);
 
   const reader = r(new oc.STEPControl_Reader());
@@ -47,11 +60,23 @@ export async function importSTEP(STLBlob: Blob) {
  * @category Import
  */
 export async function importSTL(STLBlob: Blob) {
+  const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
+  if (!getOperationCache()) return readSTL(bufferView);
+  // Routed on the file's content, once it has been read.
+  return _runOperation({
+    op: "importSTL",
+    effect: "pure",
+    receiver: undefined,
+    args: [bufferView],
+    compute: () => readSTL(bufferView),
+  });
+}
+
+function readSTL(bufferView: Uint8Array) {
   const oc = getOC();
   const [r, gc] = localGC();
 
   const fileName = uniqueId();
-  const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
   oc.FS.writeFile(`/${fileName}`, bufferView);
 
   const reader = r(new oc.StlAPI_Reader());
@@ -172,6 +197,18 @@ function parseASCIISTL(text: string): {
  */
 export async function importSTLAsMesh(stlBlob: Blob): Promise<MeshShape> {
   const buffer = await stlBlob.arrayBuffer();
+  if (!getOperationCache()) return readSTLAsMesh(buffer);
+  // Routed on the file's content, once it has been read.
+  return _runOperation({
+    op: "importSTLAsMesh",
+    effect: "pure",
+    receiver: undefined,
+    args: [new Uint8Array(buffer)],
+    compute: () => readSTLAsMesh(buffer),
+  });
+}
+
+function readSTLAsMesh(buffer: ArrayBuffer): MeshShape {
 
   const { vertices, triangles } = isBinarySTL(buffer)
     ? parseBinarySTL(buffer)
