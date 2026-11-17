@@ -14,6 +14,7 @@ import {
 } from "../addThickness.js";
 import { Face, Shape3D, Wire } from "../shapes.js";
 import { SketchInterface } from "./lib.js";
+import { _runStep, _stepWanted, _userCallback } from "../operationCacheHook";
 
 /**
  * A line drawing to be acted upon. It defines directions to be acted upon by
@@ -214,10 +215,11 @@ export default class Sketch implements SketchInterface {
     const normal = this.wire.tangentAt(1e-9).multiply(-1).normalize();
     const xDir = normal.cross(this.defaultDirection).multiply(-1);
 
-    const sketch = sketchOnPlane(
-      new Plane(startPoint, xDir, normal),
-      startPoint
-    );
+    const stepWanted = _stepWanted();
+    const makeSketch = () =>
+      sketchOnPlane(new Plane(startPoint, xDir, normal), startPoint);
+    // The factory is user code: what it calls is routed as user calls.
+    const sketch = stepWanted ? _userCallback(makeSketch) : makeSketch();
 
     const config: GenericSweepConfig = {
       forceProfileSpineOthogonality: true,
@@ -226,10 +228,20 @@ export default class Sketch implements SketchInterface {
     if (this.baseFace) {
       config.support = this.baseFace.wrapped;
     }
-    const shape = genericSweep(sketch.wire, this.wire, config);
-    this.delete();
-
-    return shape;
+    const sweep = () => {
+      const shape = genericSweep(sketch.wire, this.wire, config);
+      this.delete();
+      return shape;
+    };
+    if (!stepWanted) return sweep();
+    // Keyed on the sketch the factory returned, not on the factory itself.
+    return _runStep({
+      op: "Sketch.sweepSketch",
+      receiver: this,
+      values: () => [sketch, sweepConfig, this.baseFace ?? null],
+      compute: sweep,
+      consume: () => this.delete(),
+    });
   }
 
   /** Loft between this sketch and another sketch (or an array of them)

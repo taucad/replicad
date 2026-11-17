@@ -65,7 +65,17 @@ import {
   selectEdgeRadii,
   type ChamferEdgeConfig,
   type FilletRadius,
+  type SelectedEdge,
 } from "./shapeFunctions/edgeOperations.js";
+import {
+  _runOperation,
+  _runStep,
+  _selectedChamferValues,
+  _selectedEdgeValues,
+  _selectedOrdinals,
+  _stepWanted,
+  getOperationCache,
+} from "./operationCacheHook";
 import { downcast, iterTopo, shapeType } from "./shapeFunctions/topology.js";
 import { makeCaster } from "./shapeFunctions/casting.js";
 
@@ -185,7 +195,14 @@ export type {
 };
 
 export function deserializeShape(data: string): AnyShape {
-  return cast(deserializeTopoShape(data));
+  if (!getOperationCache()) return cast(deserializeTopoShape(data));
+  return _runOperation({
+    op: "deserializeShape",
+    effect: "pure",
+    receiver: undefined,
+    args: [data],
+    compute: () => cast(deserializeTopoShape(data)),
+  });
 }
 
 export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
@@ -845,16 +862,31 @@ export class _3DShape<Type extends TopoDS_Shape>
     }
 
     const filteredFaces = filter.find(this);
-    const newShape = cast(
-      shellShape(this.wrapped, {
-        faces: filteredFaces,
+    const shell = (): Shape3D => {
+      const newShape = cast(
+        shellShape(this.wrapped, {
+          faces: filteredFaces,
+          thickness,
+          tolerance: tol,
+        })
+      );
+      if (!isShape3D(newShape))
+        throw new Error("Could not shell as a 3d shape");
+      return newShape;
+    };
+    if (!_stepWanted()) return shell();
+    // Keyed on the faces the finder selected.
+    return _runStep({
+      op: "Shape.shell",
+      receiver: this,
+      deterministicErrors: true,
+      values: () => [
+        _selectedOrdinals(this, "face", filteredFaces),
         thickness,
-        tolerance: tol,
-      })
-    );
-    if (!isShape3D(newShape)) throw new Error("Could not shell as a 3d shape");
-
-    return newShape;
+        tol,
+      ],
+      compute: shell,
+    });
   }
 
   /**
@@ -891,9 +923,31 @@ export class _3DShape<Type extends TopoDS_Shape>
       isFilletRadius,
       (edge) => new Edge(edge)
     );
-    const newShape = cast(filletShape(this.wrapped, selectedEdges));
-    if (!isShape3D(newShape)) throw new Error("Could not fillet as a 3d shape");
-    return newShape;
+    const fillet = (
+      edges: typeof selectedEdges | SelectedEdge<FilletRadius>[]
+    ) => {
+      const newShape = cast(filletShape(this.wrapped, edges));
+      if (!isShape3D(newShape))
+        throw new Error("Could not fillet as a 3d shape");
+      return newShape;
+    };
+    if (!_stepWanted()) return fillet(selectedEdges);
+    // Keyed on the edges the finder selected and their radii. The selection
+    // deletes each edge handle once iterated, so keep copies.
+    const selected: SelectedEdge<FilletRadius>[] = [];
+    for (const { edge, radius } of selectedEdges)
+      selected.push({ edge: downcast(edge) as TopoDS_Edge, radius });
+    try {
+      return _runStep({
+        op: "Shape.fillet",
+        receiver: this,
+        deterministicErrors: true,
+        values: () => _selectedEdgeValues(this, selected),
+        compute: () => fillet(selected),
+      });
+    } finally {
+      selected.forEach(({ edge }) => edge.delete());
+    }
   }
 
   /**
@@ -951,11 +1005,32 @@ export class _3DShape<Type extends TopoDS_Shape>
             };
       }
     );
-    const newShape = cast(chamferShape(this.wrapped, chamfers));
+    const chamfer = (configs: typeof chamfers | ChamferEdgeConfig[]) => {
+      const newShape = cast(chamferShape(this.wrapped, configs));
 
-    if (!isShape3D(newShape))
-      throw new Error("Could not chamfer as a 3d shape");
-    return newShape;
+      if (!isShape3D(newShape))
+        throw new Error("Could not chamfer as a 3d shape");
+      return newShape;
+    };
+    if (!_stepWanted()) return chamfer(chamfers);
+    // As for fillet: keyed on the selection, on copies of its edge handles.
+    const selected: ChamferEdgeConfig[] = [];
+    for (const config of chamfers)
+      selected.push({
+        ...config,
+        edge: downcast(config.edge as TopoDS_Edge) as TopoDS_Edge,
+      });
+    try {
+      return _runStep({
+        op: "Shape.chamfer",
+        receiver: this,
+        deterministicErrors: true,
+        values: () => _selectedChamferValues(this, selected),
+        compute: () => chamfer(selected),
+      });
+    } finally {
+      selected.forEach(({ edge }) => (edge as TopoDS_Edge).delete());
+    }
   }
 
   /**
@@ -980,11 +1055,27 @@ export class _3DShape<Type extends TopoDS_Shape>
     neutralPlane: Plane | PlaneName = "XY"
   ): Shape3D {
     const faces = faceFinder(new FaceFinder(), this).find(this);
-    const newShape = cast(
-      draftShape(this.wrapped, { faces, angle, neutralPlane })
-    );
-    if (!isShape3D(newShape)) throw new Error("Could not draft as a 3d shape");
-    return newShape;
+    const draft = () => {
+      const newShape = cast(
+        draftShape(this.wrapped, { faces, angle, neutralPlane })
+      );
+      if (!isShape3D(newShape))
+        throw new Error("Could not draft as a 3d shape");
+      return newShape;
+    };
+    if (!_stepWanted()) return draft();
+    // Keyed on the faces the finder selected.
+    return _runStep({
+      op: "Shape.draft",
+      receiver: this,
+      deterministicErrors: true,
+      values: () => [
+        _selectedOrdinals(this, "face", faces),
+        angle,
+        neutralPlane,
+      ],
+      compute: draft,
+    });
   }
 }
 

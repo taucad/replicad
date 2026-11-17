@@ -3,9 +3,24 @@ import { getOC } from "./oclib";
 import { localGC } from "./register";
 import { MeshShape } from "./meshShapes";
 import { getManifold } from "./manifoldlib";
+import { _runOperation, getOperationCache } from "./operationCacheHook";
 
 const uniqueId = () =>
   Date.now().toString(36) + Math.random().toString(36).substring(2);
+
+type ReadContext = {
+  oc: ReturnType<typeof getOC>;
+  r: ReturnType<typeof localGC>[0];
+  gc: ReturnType<typeof localGC>[1];
+  fileName: string;
+};
+
+/** What an import sets up before it reads the file, in the original order. */
+const startImport = (): ReadContext => {
+  const oc = getOC();
+  const [r, gc] = localGC();
+  return { oc, r, gc, fileName: uniqueId() };
+};
 
 /**
  * Creates a new shapes from a STEP file (as a Blob or a File).
@@ -13,11 +28,22 @@ const uniqueId = () =>
  * @category Import
  */
 export async function importSTEP(STLBlob: Blob) {
-  const oc = getOC();
-  const [r, gc] = localGC();
-
-  const fileName = uniqueId();
+  if (!getOperationCache()) {
+    const context = startImport();
+    return readSTEP(context, new Uint8Array(await STLBlob.arrayBuffer()));
+  }
   const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
+  // Routed on the file's content, once it has been read.
+  return _runOperation({
+    op: "importSTEP",
+    effect: "pure",
+    receiver: undefined,
+    args: [bufferView],
+    compute: () => readSTEP(startImport(), bufferView),
+  });
+}
+
+function readSTEP({ oc, r, gc, fileName }: ReadContext, bufferView: Uint8Array) {
   oc.FS.writeFile(`/${fileName}`, bufferView);
 
   const reader = r(new oc.STEPControl_Reader());
@@ -47,11 +73,22 @@ export async function importSTEP(STLBlob: Blob) {
  * @category Import
  */
 export async function importSTL(STLBlob: Blob) {
-  const oc = getOC();
-  const [r, gc] = localGC();
-
-  const fileName = uniqueId();
+  if (!getOperationCache()) {
+    const context = startImport();
+    return readSTL(context, new Uint8Array(await STLBlob.arrayBuffer()));
+  }
   const bufferView = new Uint8Array(await STLBlob.arrayBuffer());
+  // Routed on the file's content, once it has been read.
+  return _runOperation({
+    op: "importSTL",
+    effect: "pure",
+    receiver: undefined,
+    args: [bufferView],
+    compute: () => readSTL(startImport(), bufferView),
+  });
+}
+
+function readSTL({ oc, r, gc, fileName }: ReadContext, bufferView: Uint8Array) {
   oc.FS.writeFile(`/${fileName}`, bufferView);
 
   const reader = r(new oc.StlAPI_Reader());
@@ -172,6 +209,18 @@ function parseASCIISTL(text: string): {
  */
 export async function importSTLAsMesh(stlBlob: Blob): Promise<MeshShape> {
   const buffer = await stlBlob.arrayBuffer();
+  if (!getOperationCache()) return readSTLAsMesh(buffer);
+  // Routed on the file's content, once it has been read.
+  return _runOperation({
+    op: "importSTLAsMesh",
+    effect: "pure",
+    receiver: undefined,
+    args: [new Uint8Array(buffer)],
+    compute: () => readSTLAsMesh(buffer),
+  });
+}
+
+function readSTLAsMesh(buffer: ArrayBuffer): MeshShape {
 
   const { vertices, triangles } = isBinarySTL(buffer)
     ? parseBinarySTL(buffer)

@@ -15,7 +15,7 @@ import { Point2D } from "../lib2d";
 import { localGC } from "../register";
 import { roundedRectangleBlueprint } from "../blueprints/cannedBlueprints";
 
-interface PlaneConfig {
+export interface PlaneConfig {
   plane?: PlaneName | Plane;
   origin?: Point | number;
 }
