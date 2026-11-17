@@ -1,6 +1,6 @@
 import type { Geom2dAPI_PointsToBSpline } from "replicad-opencascadejs";
 import { getOC } from "../oclib.js";
-import { GCWithScope, localGC } from "../register.js";
+import { ocScope } from "../register.js";
 
 import { Point2D } from "./definitions.js";
 import { axis2d, pnt, vec } from "./ocWrapper.js";
@@ -30,19 +30,20 @@ export const make2dSegmentCurve = (
   endPoint: Point2D
 ): Curve2D => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const segment = r(
+      new oc.GC_MakeSegment2d(r(pnt(startPoint)), r(pnt(endPoint)))
+    ).Value();
+    const curve = new Curve2D(segment);
 
-  const segment = r(
-    new oc.GC_MakeSegment2d(r(pnt(startPoint)), r(pnt(endPoint)))
-  ).Value();
-  const curve = new Curve2D(segment);
-
-  if (!samePoint(curve.firstPoint, startPoint)) {
-    curve.reverse();
+    if (!samePoint(curve.firstPoint, startPoint)) {
+      curve.reverse();
+    }
+    return curve;
+  } finally {
+    r.dispose();
   }
-
-  gc();
-  return curve;
 };
 
 /**
@@ -62,27 +63,29 @@ export const make2dThreePointArc = (
   endPoint: Point2D
 ): Curve2D => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const segment = r(
+      new oc.GC_MakeArcOfCircle2d(
+        r(pnt(startPoint)),
+        r(pnt(midPoint)),
+        r(pnt(endPoint))
+      )
+    ).Value();
 
-  const segment = r(
-    new oc.GC_MakeArcOfCircle2d(
-      r(pnt(startPoint)),
-      r(pnt(midPoint)),
-      r(pnt(endPoint))
-    )
-  ).Value();
-
-  const firstPoint = r(segment.Value(segment.FirstParameter()));
-  if (!samePoint([firstPoint.X(), firstPoint.Y()], startPoint)) {
-    segment.SetTrim(
-      segment.LastParameter(),
-      segment.FirstParameter(),
-      true,
-      true
-    );
+    const firstPoint = r(segment.Value(segment.FirstParameter()));
+    if (!samePoint([firstPoint.X(), firstPoint.Y()], startPoint)) {
+      segment.SetTrim(
+        segment.LastParameter(),
+        segment.FirstParameter(),
+        true,
+        true
+      );
+    }
+    return new Curve2D(segment);
+  } finally {
+    r.dispose();
   }
-  gc();
-  return new Curve2D(segment);
 };
 
 /**
@@ -102,27 +105,29 @@ export const make2dTangentArc = (
   endPoint: Point2D
 ): Curve2D => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const segment = r(
+      new oc.GC_MakeArcOfCircle2d(
+        r(pnt(startPoint)),
+        r(vec(tangent)),
+        r(pnt(endPoint))
+      )
+    ).Value();
 
-  const segment = r(
-    new oc.GC_MakeArcOfCircle2d(
-      r(pnt(startPoint)),
-      r(vec(tangent)),
-      r(pnt(endPoint))
-    )
-  ).Value();
-
-  const firstPoint = r(segment.Value(segment.FirstParameter()));
-  if (!samePoint([firstPoint.X(), firstPoint.Y()], startPoint)) {
-    segment.SetTrim(
-      segment.LastParameter(),
-      segment.FirstParameter(),
-      true,
-      true
-    );
+    const firstPoint = r(segment.Value(segment.FirstParameter()));
+    if (!samePoint([firstPoint.X(), firstPoint.Y()], startPoint)) {
+      segment.SetTrim(
+        segment.LastParameter(),
+        segment.FirstParameter(),
+        true,
+        true
+      );
+    }
+    return new Curve2D(segment);
+  } finally {
+    r.dispose();
   }
-  gc();
-  return new Curve2D(segment);
 };
 
 /**
@@ -140,14 +145,16 @@ export const make2dCircle = (
   center: Point2D = [0, 0]
 ): Curve2D => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const segment = r(
+      new oc.GC_MakeCircle2d(r(pnt(center)), radius, true)
+    ).Value();
 
-  const segment = r(
-    new oc.GC_MakeCircle2d(r(pnt(center)), radius, true)
-  ).Value();
-  gc();
-
-  return new Curve2D(segment);
+    return new Curve2D(segment);
+  } finally {
+    r.dispose();
+  }
 };
 
 /**
@@ -171,20 +178,23 @@ export const make2dEllipse = (
   direct = true
 ): Curve2D => {
   const oc = getOC();
-  const [r, gc] = localGC();
-  const ellipse = r(
-    new oc.gp_Elips2d(
-      r(axis2d(center, xDir)),
-      majorRadius,
-      minorRadius,
-      direct
-    )
-  );
+  const r = ocScope();
+  try {
+    const ellipse = r(
+      new oc.gp_Elips2d(
+        r(axis2d(center, xDir)),
+        majorRadius,
+        minorRadius,
+        direct
+      )
+    );
 
-  const segment = r(new oc.GC_MakeEllipse2d(ellipse)).Value();
-  gc();
+    const segment = r(new oc.GC_MakeEllipse2d(ellipse)).Value();
 
-  return new Curve2D(segment);
+    return new Curve2D(segment);
+  } finally {
+    r.dispose();
+  }
 };
 
 /**
@@ -212,17 +222,20 @@ export const make2dEllipseArc = (
   direct = true
 ): Curve2D => {
   const oc = getOC();
-  const [r, gc] = localGC();
-  const ellipse = r(
-    new oc.gp_Elips2d(r(axis2d(center, xDir)), majorRadius, minorRadius, true)
-  );
+  const r = ocScope();
+  try {
+    const ellipse = r(
+      new oc.gp_Elips2d(r(axis2d(center, xDir)), majorRadius, minorRadius, true)
+    );
 
-  const segment = r(
-    new oc.GC_MakeArcOfEllipse2d(ellipse, startAngle, endAngle, direct)
-  ).Value();
-  gc();
+    const segment = r(
+      new oc.GC_MakeArcOfEllipse2d(ellipse, startAngle, endAngle, direct)
+    ).Value();
 
-  return new Curve2D(segment);
+    return new Curve2D(segment);
+  } finally {
+    r.dispose();
+  }
 };
 
 /**
@@ -242,23 +255,25 @@ export const make2dBezierCurve = (
   endPoint: Point2D
 ): Curve2D => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const arrayOfPoints = r(
+      new oc.NCollection_Array1_gp_Pnt2d(1, controls.length + 2)
+    );
+    arrayOfPoints.SetValue(1, r(pnt(startPoint)));
 
-  const arrayOfPoints = r(
-    new oc.NCollection_Array1_gp_Pnt2d(1, controls.length + 2)
-  );
-  arrayOfPoints.SetValue(1, r(pnt(startPoint)));
+    controls.forEach((p, i) => {
+      arrayOfPoints.SetValue(i + 2, r(pnt(p)));
+    });
 
-  controls.forEach((p, i) => {
-    arrayOfPoints.SetValue(i + 2, r(pnt(p)));
-  });
+    arrayOfPoints.SetValue(controls.length + 2, r(pnt(endPoint)));
 
-  arrayOfPoints.SetValue(controls.length + 2, r(pnt(endPoint)));
+    const bezCurve = new oc.Geom2d_BezierCurve(arrayOfPoints);
 
-  const bezCurve = new oc.Geom2d_BezierCurve(arrayOfPoints);
-  gc();
-
-  return new Curve2D(bezCurve);
+    return new Curve2D(bezCurve);
+  } finally {
+    r.dispose();
+  }
 };
 
 /**
@@ -289,44 +304,48 @@ export function make2dInerpolatedBSplineCurve(
     degMin?: number;
   } = {}
 ) {
-  const r = GCWithScope();
-  const oc = getOC();
+  const r = ocScope();
+  try {
+    const oc = getOC();
 
-  const pnts = r(new oc.NCollection_Array1_gp_Pnt2d(1, points.length));
+    const pnts = r(new oc.NCollection_Array1_gp_Pnt2d(1, points.length));
 
-  points.forEach((point, index) => {
-    pnts.SetValue(index + 1, r(pnt(point)));
-  });
+    points.forEach((point, index) => {
+      pnts.SetValue(index + 1, r(pnt(point)));
+    });
 
-  let splineBuilder: Geom2dAPI_PointsToBSpline;
+    let splineBuilder: Geom2dAPI_PointsToBSpline;
 
-  if (smoothing) {
-    splineBuilder = r(new oc.Geom2dAPI_PointsToBSpline());
-    splineBuilder.Init(
-      pnts,
-      smoothing[0],
-      smoothing[1],
-      smoothing[2],
-      degMax,
-      oc.GeomAbs_Shape.GeomAbs_C2,
-      tolerance
-    );
-  } else {
-    splineBuilder = r(new oc.Geom2dAPI_PointsToBSpline());
-    splineBuilder.Init(
-      pnts,
-      degMin,
-      degMax,
-      oc.GeomAbs_Shape.GeomAbs_C2,
-      tolerance
-    );
+    if (smoothing) {
+      splineBuilder = r(new oc.Geom2dAPI_PointsToBSpline());
+      splineBuilder.Init(
+        pnts,
+        smoothing[0],
+        smoothing[1],
+        smoothing[2],
+        degMax,
+        oc.GeomAbs_Shape.GeomAbs_C2,
+        tolerance
+      );
+    } else {
+      splineBuilder = r(new oc.Geom2dAPI_PointsToBSpline());
+      splineBuilder.Init(
+        pnts,
+        degMin,
+        degMax,
+        oc.GeomAbs_Shape.GeomAbs_C2,
+        tolerance
+      );
+    }
+
+    if (!splineBuilder.IsDone()) {
+      throw new Error("B-spline approximation failed");
+    }
+
+    return new Curve2D(splineBuilder.Curve());
+  } finally {
+    r.dispose();
   }
-
-  if (!splineBuilder.IsDone()) {
-    throw new Error("B-spline approximation failed");
-  }
-
-  return new Curve2D(splineBuilder.Curve());
 }
 
 // This assumes that both start and end points are at radius distance from the

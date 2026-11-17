@@ -1,4 +1,4 @@
-import { WrappingObj, GCWithScope } from "./register.js";
+import { WrappingObj, ocScope } from "./register.js";
 import { DEG2RAD, RAD2DEG } from "./constants.js";
 import { getOC } from "./oclib.js";
 
@@ -100,6 +100,16 @@ export const makeAx1 = (center: Point, dir: Direction): gp_Ax1 => {
   return axis;
 };
 
+/** A new `gp_Vec` from an OpenCascade value with `XYZ()`, deleting the copy. */
+const vecFromXYZ = (value: { XYZ: () => gp_XYZ }): gp_Vec => {
+  const xyz = value.XYZ();
+  try {
+    return new (getOC().gp_Vec)(xyz);
+  } finally {
+    xyz.delete();
+  }
+};
+
 const makeVec = (vector: Point = [0, 0, 0]): gp_Vec => {
   const oc = getOC();
 
@@ -107,14 +117,36 @@ const makeVec = (vector: Point = [0, 0, 0]): gp_Vec => {
     if (vector.length === 3) return new oc.gp_Vec(...vector);
     else if (vector.length === 2) return new oc.gp_Vec(...vector, 0);
   } else if (vector instanceof Vector) {
-    return new oc.gp_Vec(vector.wrapped.XYZ());
-  } else if (vector.XYZ) return new oc.gp_Vec(vector.XYZ());
+    return vecFromXYZ(vector.wrapped);
+  } else if (typeof vector.XYZ === "function") return vecFromXYZ(vector);
   return new oc.gp_Vec(0, 0, 0);
 };
 
+// A fresh `gp_Vec` the next Vector adopts instead of copying its argument.
+let adoptedVec: gp_Vec | null = null;
+const takeAdoptedVec = (): gp_Vec | null => {
+  const vec = adoptedVec;
+  adoptedVec = null;
+  return vec;
+};
+
+/** Wraps a `gp_Vec` an OpenCascade call just returned, without copying it. */
+const adoptVec = (vec: gp_Vec): Vector => {
+  adoptedVec = vec;
+  try {
+    return new Vector();
+  } finally {
+    adoptedVec = null;
+  }
+};
+
 export class Vector extends WrappingObj<gp_Vec> {
+  /**
+   * A new vector holding a copy of `vector`'s coordinates: the caller keeps
+   * ownership of an OpenCascade value it passes.
+   */
   constructor(vector: Point = [0, 0, 0]) {
-    super(makeVec(vector));
+    super(takeAdoptedVec() ?? makeVec(vector));
   }
 
   get repr(): string {
@@ -142,7 +174,7 @@ export class Vector extends WrappingObj<gp_Vec> {
   }
 
   cross(v: Vector): Vector {
-    return new Vector(this.wrapped.Crossed(v.wrapped));
+    return adoptVec(this.wrapped.Crossed(v.wrapped));
   }
 
   dot(v: Vector): number {
@@ -150,19 +182,19 @@ export class Vector extends WrappingObj<gp_Vec> {
   }
 
   sub(v: Vector): Vector {
-    return new Vector(this.wrapped.Subtracted(v.wrapped));
+    return adoptVec(this.wrapped.Subtracted(v.wrapped));
   }
 
   add(v: Vector): Vector {
-    return new Vector(this.wrapped.Added(v.wrapped));
+    return adoptVec(this.wrapped.Added(v.wrapped));
   }
 
   multiply(scale: number): Vector {
-    return new Vector(this.wrapped.Multiplied(scale));
+    return adoptVec(this.wrapped.Multiplied(scale));
   }
 
   normalized(): Vector {
-    return new Vector(this.wrapped.Normalized());
+    return adoptVec(this.wrapped.Normalized());
   }
 
   normalize(): Vector {
@@ -197,11 +229,21 @@ export class Vector extends WrappingObj<gp_Vec> {
   }
 
   toPnt(): gp_Pnt {
-    return new this.oc.gp_Pnt(this.wrapped.XYZ());
+    const xyz = this.wrapped.XYZ();
+    try {
+      return new this.oc.gp_Pnt(xyz);
+    } finally {
+      xyz.delete();
+    }
   }
 
   toDir(): gp_Dir {
-    return new this.oc.gp_Dir(this.wrapped.XYZ());
+    const xyz = this.wrapped.XYZ();
+    try {
+      return new this.oc.gp_Dir(xyz);
+    } finally {
+      xyz.delete();
+    }
   }
 
   rotate(
@@ -295,7 +337,11 @@ export class Transformation extends WrappingObj<gp_Trsf> {
         : xDistOrVector
     );
 
-    this.wrapped.SetTranslation(translation.wrapped);
+    try {
+      this.wrapped.SetTranslation(translation.wrapped);
+    } finally {
+      translation.delete();
+    }
 
     return this;
   }
@@ -321,25 +367,28 @@ export class Transformation extends WrappingObj<gp_Trsf> {
     inputPlane: Plane | PlaneName | Point = "YZ",
     inputOrigin?: Point
   ): this {
-    const r = GCWithScope();
+    const r = ocScope();
+    try {
+      let origin: Point;
+      let direction: Point;
 
-    let origin: Point;
-    let direction: Point;
+      if (typeof inputPlane === "string") {
+        const plane = r(createNamedPlane(inputPlane, inputOrigin));
+        origin = plane.origin;
+        direction = plane.zDir;
+      } else if (inputPlane instanceof Plane) {
+        origin = inputOrigin || inputPlane.origin;
+        direction = inputPlane.zDir;
+      } else {
+        origin = inputOrigin || [0, 0, 0];
+        direction = inputPlane;
+      }
 
-    if (typeof inputPlane === "string") {
-      const plane = r(createNamedPlane(inputPlane, inputOrigin));
-      origin = plane.origin;
-      direction = plane.zDir;
-    } else if (inputPlane instanceof Plane) {
-      origin = inputOrigin || inputPlane.origin;
-      direction = inputPlane.zDir;
-    } else {
-      origin = inputOrigin || [0, 0, 0];
-      direction = inputPlane;
+      const mirrorAxis = r(makeAx2(origin, direction));
+      this.wrapped.SetMirror(mirrorAxis);
+    } finally {
+      r.dispose();
     }
-
-    const mirrorAxis = r(makeAx2(origin, direction));
-    this.wrapped.SetMirror(mirrorAxis);
 
     return this;
   }
@@ -361,19 +410,23 @@ export class Transformation extends WrappingObj<gp_Trsf> {
   }
 
   coordSystemChange(fromSystem: CoordSystem, toSystem: CoordSystem): this {
-    const r = GCWithScope();
-    const fromAx = r(
-      fromSystem === "reference"
-        ? new this.oc.gp_Ax3()
-        : makeAx3(fromSystem.origin, fromSystem.zDir, fromSystem.xDir)
-    );
+    const r = ocScope();
+    try {
+      const fromAx = r(
+        fromSystem === "reference"
+          ? new this.oc.gp_Ax3()
+          : makeAx3(fromSystem.origin, fromSystem.zDir, fromSystem.xDir)
+      );
 
-    const toAx = r(
-      toSystem === "reference"
-        ? new this.oc.gp_Ax3()
-        : makeAx3(toSystem.origin, toSystem.zDir, toSystem.xDir)
-    );
-    this.wrapped.SetTransformation(fromAx, toAx);
+      const toAx = r(
+        toSystem === "reference"
+          ? new this.oc.gp_Ax3()
+          : makeAx3(toSystem.origin, toSystem.zDir, toSystem.xDir)
+      );
+      this.wrapped.SetTransformation(fromAx, toAx);
+    } finally {
+      r.dispose();
+    }
     return this;
   }
 
@@ -450,6 +503,7 @@ export class Plane {
 
   delete(): void {
     this.localToGlobal.delete();
+    this.globalToLocal.delete();
     this.xDir.delete();
     this.yDir.delete();
     this.zDir.delete();
@@ -464,8 +518,11 @@ export class Plane {
     return this._origin;
   }
 
+  /** Takes ownership of `newOrigin`; the previous origin is deleted. */
   set origin(newOrigin: Vector) {
+    const previous = this._origin;
     this._origin = newOrigin;
+    if (previous && previous !== newOrigin) previous.delete();
     this._calcTransforms();
   }
 
@@ -484,7 +541,13 @@ export class Plane {
         : xDistOrVector
     );
 
-    return this.translateTo(this.origin.add(translation));
+    const origin = this.origin.add(translation);
+    translation.delete();
+    try {
+      return this.translateTo(origin);
+    } finally {
+      origin.delete();
+    }
   }
 
   translateX(xDist: number): Plane {
@@ -503,21 +566,27 @@ export class Plane {
     const zDir = new Vector(this.zDir).rotate(angle, [0, 0, 0], direction);
     const xDir = new Vector(this.xDir).rotate(angle, [0, 0, 0], direction);
 
-    return new Plane(this.origin, xDir, zDir);
+    try {
+      return new Plane(this.origin, xDir, zDir);
+    } finally {
+      zDir.delete();
+      xDir.delete();
+    }
   }
 
   rotate2DAxes(angle: number): Plane {
     const xDir = new Vector(this.xDir).rotate(angle, [0, 0, 0], this.zDir);
 
-    return new Plane(this.origin, xDir, this.zDir);
+    try {
+      return new Plane(this.origin, xDir, this.zDir);
+    } finally {
+      xDir.delete();
+    }
   }
 
   _calcTransforms(): void {
-    const globalCoordSystem = new this.oc.gp_Ax3();
-    const localCoordSystem = makeAx3(this.origin, this.zDir, this.xDir);
-
-    const forwardT = new this.oc.gp_Trsf();
-    forwardT.SetTransformation(globalCoordSystem, localCoordSystem);
+    this.globalToLocal?.delete();
+    this.localToGlobal?.delete();
     this.globalToLocal = new Transformation();
     this.globalToLocal.coordSystemChange("reference", {
       origin: this.origin,
@@ -661,7 +730,13 @@ export class BoundingBox extends WrappingObj<Bnd_Box> {
 
   get repr(): string {
     const [min, max] = this.bounds;
-    return `${new Vector(min).repr} - ${new Vector(max).repr}`;
+    const [low, high] = [new Vector(min), new Vector(max)];
+    try {
+      return `${low.repr} - ${high.repr}`;
+    } finally {
+      low.delete();
+      high.delete();
+    }
   }
 
   get bounds(): [SimplePoint, SimplePoint] {

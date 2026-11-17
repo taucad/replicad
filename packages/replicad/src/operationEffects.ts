@@ -268,9 +268,10 @@ export const classEffects = (): readonly ClassEffects[] => [
     routed: true,
     members: members({
       alias: "clone blueprint",
+      consumes: "delete",
       pure: `serialize boundingBox repr cut fuse intersect fillet chamfer offset approximate ${BLUEPRINT_OPS} ${SVG}`,
     }),
-    unrouted: ["serialize", ...SVG.split(" ")],
+    unrouted: ["serialize", "delete", ...SVG.split(" ")],
     finderArgs: { fillet: [1], chamfer: [1], punchHole: [1] },
   },
   {
@@ -300,9 +301,10 @@ export const classEffects = (): readonly ClassEffects[] => [
     finderArgs: { punchHole: [1] },
     members: members({
       alias: "clone",
+      consumes: "delete",
       pure: `repr boundingBox ${BLUEPRINT_OPS} ${SVG}`,
     }),
-    unrouted: SVG.split(" "),
+    unrouted: ["delete", ...SVG.split(" ")],
   },
   {
     target: CompoundBlueprint,
@@ -311,9 +313,10 @@ export const classEffects = (): readonly ClassEffects[] => [
     finderArgs: { punchHole: [1] },
     members: members({
       alias: "clone",
+      consumes: "delete",
       pure: `repr boundingBox toSVGGroup ${BLUEPRINT_OPS} ${SVG}`,
     }),
-    unrouted: ["toSVGGroup", ...SVG.split(" ")],
+    unrouted: ["toSVGGroup", "delete", ...SVG.split(" ")],
   },
   {
     target: BaseSketcher2d,
@@ -472,6 +475,7 @@ export const classEffects = (): readonly ClassEffects[] => [
     routed: false,
     members: members({
       pure: "boundingBox repr innerCurve serialize value firstPoint lastPoint firstParameter lastParameter adaptor geomType distanceFromPoint distanceFromCurve distanceFrom isOnCurve parameter tangentAt splitAt",
+      consumes: "delete",
       alias: "clone",
       mutates: "reverse",
     }),
@@ -703,16 +707,18 @@ export const functionEffects: Readonly<Record<string, FunctionEffects>> =
   return Object.fromEntries([
     ...routed(ROUTED_FUNCTION_NAMES.join(" ")),
     ...routed("importSTEP importSTL importSTLAsMesh deserializeShape"),
+    // Takes ownership of the raw handle it wraps (see makeCaster).
+    ...direct("consumes", "cast"),
     ...direct(
       "pure",
       // Raw OpenCascade values, conversions and geometry helpers.
-      "asDir asPnt axis2d makeAx1 makeAx2 makeAx3 makeDirection makeDirVector makePlane makePln makePlaneFromFace createNamedPlane resolveDirection lookFromPlane polysideInnerRadius organiseBlueprints isPoint isProjectionPlane isShape3D isWire shapeType iterTopo downcast cast translate rotate mirror scale " +
+      "asDir asPnt axis2d makeAx1 makeAx2 makeAx3 makeDirection makeDirVector makePlane makePln makePlaneFromFace createNamedPlane resolveDirection lookFromPlane polysideInnerRadius organiseBlueprints isPoint isProjectionPlane isShape3D isWire shapeType iterTopo downcast translate rotate mirror scale " +
         // Finder helpers (selections, no new geometry).
         "getSingleFace combineFinderFilters atShapeExtremum topMost bottomMost leftMost rightMost frontMost backMost " +
         // Measurements and export.
         "measureArea measureLength measureVolume measureDistanceBetween measureShapeLinearProperties measureShapeSurfaceProperties measureShapeVolumeProperties exportSTEP createAssembly " +
         // Configuration and memory helpers.
-        "getOC setOC getManifold setManifold loadFont getFont localGC GCWithScope GCWithObject " +
+        "getOC setOC getManifold setManifold loadFont getFont localGC GCWithScope GCWithObject ocScope withOcScope " +
         // The seam.
         "setOperationCache getOperationCache bypassOperationCache elementOrdinals"
     ),

@@ -24,8 +24,15 @@ export default class Blueprints implements DrawingInterface {
     return ["Blueprints", ...this.blueprints.map((b) => b.repr)].join("\n");
   }
 
+  /** A copy with its own curves: deleting one leaves the other intact. */
   clone() {
-    return new Blueprints(this.blueprints);
+    return new Blueprints(this.blueprints.map((blueprint) => blueprint.clone()));
+  }
+
+  delete() {
+    this.blueprints.forEach((blueprint) => blueprint.delete());
+    this._boundingBox?.delete();
+    this._boundingBox = null;
   }
 
   get boundingBox(): BoundingBox2d {

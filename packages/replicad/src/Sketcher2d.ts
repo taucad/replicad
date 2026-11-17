@@ -1,6 +1,6 @@
 import Sketch from "./sketches/Sketch";
 import { DEG2RAD, RAD2DEG } from "./constants.js";
-import { localGC } from "./register.js";
+import { ocScope } from "./register.js";
 import { getOC } from "./oclib.js";
 import { assembleWire } from "./shapeHelpers";
 import { Edge, Face, Wire } from "./shapes";
@@ -615,42 +615,46 @@ export default class FaceSketcher
    * @ignore
    */
   protected buildWire(): Wire {
-    const [r, gc] = localGC();
-    const oc = getOC();
+    const r = ocScope();
+    try {
+      const oc = getOC();
 
-    const geomSurf = r(this._adaptSurface());
+      const geomSurf = r(this._adaptSurface());
 
-    const edges = this.pendingCurves.map((curve) => {
-      return r(
-        new Edge(
-          r(new oc.BRepBuilderAPI_MakeEdge(curve.wrapped, geomSurf)).Edge()
-        )
-      );
-    });
-    const wire = assembleWire(edges);
-    oc.BRepLib.BuildCurves3d(wire.wrapped);
-
-    gc();
-    return wire;
+      const edges = this.pendingCurves.map((curve) => {
+        return r(
+          new Edge(
+            r(new oc.BRepBuilderAPI_MakeEdge(curve.wrapped, geomSurf)).Edge()
+          )
+        );
+      });
+      const wire = assembleWire(edges);
+      oc.BRepLib.BuildCurves3d(wire.wrapped);
+      return wire;
+    } finally {
+      r.dispose();
+    }
   }
 
   done(): Sketch {
-    const [r, gc] = localGC();
-
-    const wire = this.buildWire();
-    const sketch = new Sketch(wire);
-    if (wire.isClosed) {
-      const face = r(sketch.clone().face());
-      sketch.defaultOrigin = r(face.pointOnSurface(0.5, 0.5));
-      sketch.defaultDirection = r(r(face.normalAt()).multiply(-1));
-    } else {
-      const startPoint = r(wire.startPoint);
-      sketch.defaultOrigin = startPoint;
-      sketch.defaultDirection = r(this.face.normalAt(startPoint));
+    const r = ocScope();
+    try {
+      const wire = this.buildWire();
+      const sketch = new Sketch(wire);
+      if (wire.isClosed) {
+        const face = r(sketch.clone().face());
+        sketch.defaultOrigin = r(face.pointOnSurface(0.5, 0.5));
+        sketch.defaultDirection = r(r(face.normalAt()).multiply(-1));
+      } else {
+        const startPoint = r(wire.startPoint);
+        sketch.defaultOrigin = startPoint;
+        sketch.defaultDirection = r(this.face.normalAt(startPoint));
+      }
+      sketch.baseFace = this.face;
+      return sketch;
+    } finally {
+      r.dispose();
     }
-    sketch.baseFace = this.face;
-    gc();
-    return sketch;
   }
 
   close(): Sketch {

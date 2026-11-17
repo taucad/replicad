@@ -47,16 +47,25 @@ const ledgerCases: Record<string, () => void> = {
     const drawing = r.drawRectangle(10, 5);
     del(drawing.sketchOnPlane("XY"), drawing);
   },
-  "sketch.extrude": () =>
-    del(r.drawRectangle(10, 5).sketchOnPlane("XY").extrude(5)),
-  "sketch.revolve": () =>
-    del(r.drawRectangle(4, 5).translate(5, 0).sketchOnPlane("XZ").revolve()),
+  "sketch.extrude": () => {
+    const drawing = r.drawRectangle(10, 5);
+    del(drawing.sketchOnPlane("XY").extrude(5), drawing);
+  },
+  "sketch.revolve": () => {
+    const drawing = r.drawRectangle(4, 5);
+    const moved = drawing.translate(5, 0);
+    del(moved.sketchOnPlane("XZ").revolve(), moved, drawing);
+  },
   "sketchCircle.loftWith": () =>
     del(r.sketchCircle(5).loftWith(r.sketchCircle(3, { origin: 10 }))),
-  "drawRoundedRectangle.extrude": () =>
-    del(r.drawRoundedRectangle(20, 10, 2).sketchOnPlane().extrude(5)),
-  "drawPolysides.extrude": () =>
-    del(r.drawPolysides(10, 6).sketchOnPlane().extrude(5)),
+  "drawRoundedRectangle.extrude": () => {
+    const drawing = r.drawRoundedRectangle(20, 10, 2);
+    del(drawing.sketchOnPlane().extrude(5), drawing);
+  },
+  "drawPolysides.extrude": () => {
+    const drawing = r.drawPolysides(10, 6);
+    del(drawing.sketchOnPlane().extrude(5), drawing);
+  },
   "drawing.fuse": () => {
     const a = r.drawRectangle(10, 5);
     const b = r.drawCircle(4);

@@ -21,7 +21,7 @@ import {
   makeAx1,
 } from "./geom";
 import { getOC } from "./oclib.js";
-import { GCWithScope, localGC, WrappingObj } from "./register.js";
+import { ocScope, WrappingObj } from "./register.js";
 import zip from "./utils/zip";
 import type {
   GeomAPI_PointsToBSpline,
@@ -31,9 +31,14 @@ import type {
 
 export const makeLine = (v1: Point, v2: Point): Edge => {
   const oc = getOC();
-  return new Edge(
-    new oc.BRepBuilderAPI_MakeEdge(asPnt(v1), asPnt(v2)).Edge()
-  );
+  const r = ocScope();
+  try {
+    return new Edge(
+      r(new oc.BRepBuilderAPI_MakeEdge(r(asPnt(v1)), r(asPnt(v2)))).Edge()
+    );
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makeCircle = (
@@ -42,16 +47,18 @@ export const makeCircle = (
   normal: Direction = [0, 0, 1]
 ): Edge => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const ax = r(makeAx2(center, normal));
 
-  const ax = r(makeAx2(center, normal));
+    const circleGp = r(new oc.gp_Circ(ax, radius));
+    const edgeMaker = r(new oc.BRepBuilderAPI_MakeEdge(circleGp));
+    const shape = new Edge(edgeMaker.Edge());
 
-  const circleGp = r(new oc.gp_Circ(ax, radius));
-  const edgeMaker = r(new oc.BRepBuilderAPI_MakeEdge(circleGp));
-  const shape = new Edge(edgeMaker.Edge());
-  gc();
-
-  return shape;
+    return shape;
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makeEllipse = (
@@ -62,19 +69,21 @@ export const makeEllipse = (
   xDir?: Direction
 ): Edge => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const ax = r(makeAx2(center, normal, xDir));
 
-  const ax = r(makeAx2(center, normal, xDir));
+    if (minorRadius > majorRadius) {
+      throw new Error("The minor radius must be smaller than the major one");
+    }
+    const ellipseGp = r(new oc.gp_Elips(ax, majorRadius, minorRadius));
+    const edgeMaker = r(new oc.BRepBuilderAPI_MakeEdge(ellipseGp));
+    const shape = new Edge(edgeMaker.Edge());
 
-  if (minorRadius > majorRadius) {
-    throw new Error("The minor radius must be smaller than the major one");
+    return shape;
+  } finally {
+    r.dispose();
   }
-  const ellipseGp = r(new oc.gp_Elips(ax, majorRadius, minorRadius));
-  const edgeMaker = r(new oc.BRepBuilderAPI_MakeEdge(ellipseGp));
-  const shape = new Edge(edgeMaker.Edge());
-  gc();
-
-  return shape;
 };
 
 export const makeHelix = (
@@ -86,59 +95,68 @@ export const makeHelix = (
   lefthand = false
 ): Wire => {
   const oc = getOC();
-  const [r, gc] = localGC();
-  let myDir = 2 * Math.PI;
-  if (lefthand) {
-    myDir = -2 * Math.PI;
+  const r = ocScope();
+  try {
+    let myDir = 2 * Math.PI;
+    if (lefthand) {
+      myDir = -2 * Math.PI;
+    }
+
+    const geomLine = r(
+      new oc.Geom2d_Line(
+        r(new oc.gp_Pnt2d(0.0, 0.0)),
+        r(new oc.gp_Dir2d(myDir, pitch))
+      )
+    );
+
+    // 3. put it together into a wire
+    const nTurns = height / pitch;
+    const uStart = r(geomLine.Value(0.0));
+    const uStop = r(
+      geomLine.Value(nTurns * Math.sqrt((2 * Math.PI) ** 2 + pitch ** 2))
+    );
+    const geomSeg = r(new oc.GC_MakeSegment2d(uStart, uStop));
+
+    // We do not GC this surface (or it can break for some reason)
+    const geomSurf = new oc.Geom_CylindricalSurface(
+      r(makeAx3(center, dir)),
+      radius
+    );
+
+    const e = r(
+      r(
+        new oc.BRepBuilderAPI_MakeEdge(
+          r(geomSeg.Value()),
+          r(geomSurf)
+        )
+      ).Edge()
+    );
+
+    // 4. Convert to wire and fix building 3d geom from 2d geom
+    const w = r(new oc.BRepBuilderAPI_MakeWire(e)).Wire();
+    oc.BRepLib.BuildCurves3d(w);
+
+    return new Wire(w);
+  } finally {
+    r.dispose();
   }
-
-  const geomLine = r(
-    new oc.Geom2d_Line(
-      r(new oc.gp_Pnt2d(0.0, 0.0)),
-      r(new oc.gp_Dir2d(myDir, pitch))
-    )
-  );
-
-  // 3. put it together into a wire
-  const nTurns = height / pitch;
-  const uStart = geomLine.Value(0.0);
-  const uStop = geomLine.Value(
-    nTurns * Math.sqrt((2 * Math.PI) ** 2 + pitch ** 2)
-  );
-  const geomSeg = r(new oc.GC_MakeSegment2d(uStart, uStop));
-
-  // We do not GC this surface (or it can break for some reason)
-  const geomSurf = new oc.Geom_CylindricalSurface(
-    r(makeAx3(center, dir)),
-    radius
-  );
-
-  const e = r(
-    new oc.BRepBuilderAPI_MakeEdge(
-      r(geomSeg.Value()),
-      r(geomSurf)
-    )
-  ).Edge();
-
-  // 4. Convert to wire and fix building 3d geom from 2d geom
-  const w = r(new oc.BRepBuilderAPI_MakeWire(e)).Wire();
-  oc.BRepLib.BuildCurves3d(w);
-
-  gc();
-
-  return new Wire(w);
 };
 
 export const makeThreePointArc = (v1: Point, v2: Point, v3: Point): Edge => {
   const oc = getOC();
-  const circleGeom = new oc.GC_MakeArcOfCircle(
-    asPnt(v1),
-    asPnt(v2),
-    asPnt(v3)
-  ).Value();
+  const r = ocScope();
+  try {
+    const circleGeom = r(
+      r(
+        new oc.GC_MakeArcOfCircle(r(asPnt(v1)), r(asPnt(v2)), r(asPnt(v3)))
+      ).Value()
+    );
 
-  const curve = circleGeom;
-  return new Edge(new oc.BRepBuilderAPI_MakeEdge(curve).Edge());
+    const curve = circleGeom;
+    return new Edge(r(new oc.BRepBuilderAPI_MakeEdge(curve)).Edge());
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makeEllipseArc = (
@@ -151,21 +169,23 @@ export const makeEllipseArc = (
   xDir?: Direction
 ): Edge => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const ax = r(makeAx2(center, normal, xDir));
+    if (minorRadius > majorRadius) {
+      throw new Error("The minor radius must be smaller than the major one");
+    }
 
-  const ax = r(makeAx2(center, normal, xDir));
-  if (minorRadius > majorRadius) {
-    throw new Error("The minor radius must be smaller than the major one");
+    const ellipseGp = r(new oc.gp_Elips(ax, majorRadius, minorRadius));
+    const edgeMaker = r(
+      new oc.BRepBuilderAPI_MakeEdge(ellipseGp, startAngle, endAngle)
+    );
+    const shape = new Edge(edgeMaker.Edge());
+
+    return shape;
+  } finally {
+    r.dispose();
   }
-
-  const ellipseGp = r(new oc.gp_Elips(ax, majorRadius, minorRadius));
-  const edgeMaker = r(
-    new oc.BRepBuilderAPI_MakeEdge(ellipseGp, startAngle, endAngle)
-  );
-  const shape = new Edge(edgeMaker.Edge());
-  gc();
-
-  return shape;
 };
 
 export interface BSplineApproximationConfig {
@@ -185,61 +205,69 @@ export const makeBSplineApproximation = function makeBSplineApproximation(
   }: BSplineApproximationConfig = {}
 ): Edge {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const pnts = r(new oc.NCollection_Array1_gp_Pnt(1, points.length));
 
-  const pnts = r(new oc.NCollection_Array1_gp_Pnt(1, points.length));
+    points.forEach((point, index) => {
+      pnts.SetValue(index + 1, r(asPnt(point)));
+    });
 
-  points.forEach((point, index) => {
-    pnts.SetValue(index + 1, r(asPnt(point)));
-  });
+    let splineBuilder: GeomAPI_PointsToBSpline;
 
-  let splineBuilder: GeomAPI_PointsToBSpline;
+    if (smoothing) {
+      splineBuilder = r(new oc.GeomAPI_PointsToBSpline());
+      splineBuilder.Init(
+        pnts,
+        smoothing[0],
+        smoothing[1],
+        smoothing[2],
+        degMax,
+        oc.GeomAbs_Shape.GeomAbs_C2,
+        tolerance
+      );
+    } else {
+      splineBuilder = r(new oc.GeomAPI_PointsToBSpline());
+      splineBuilder.Init(
+        pnts,
+        degMin,
+        degMax,
+        oc.GeomAbs_Shape.GeomAbs_C2,
+        tolerance
+      );
+    }
 
-  if (smoothing) {
-    splineBuilder = r(new oc.GeomAPI_PointsToBSpline());
-    splineBuilder.Init(
-      pnts,
-      smoothing[0],
-      smoothing[1],
-      smoothing[2],
-      degMax,
-      oc.GeomAbs_Shape.GeomAbs_C2,
-      tolerance
-    );
-  } else {
-    splineBuilder = r(new oc.GeomAPI_PointsToBSpline());
-    splineBuilder.Init(
-      pnts,
-      degMin,
-      degMax,
-      oc.GeomAbs_Shape.GeomAbs_C2,
-      tolerance
-    );
+    if (!splineBuilder.IsDone()) {
+      throw new Error("B-spline approximation failed");
+    }
+
+    const splineGeom = r(splineBuilder.Curve());
+
+    const curve = r(splineGeom);
+    const edge = new Edge(r(new oc.BRepBuilderAPI_MakeEdge(curve)).Edge());
+    return edge;
+  } finally {
+    r.dispose();
   }
-
-  if (!splineBuilder.IsDone()) {
-    gc();
-    throw new Error("B-spline approximation failed");
-  }
-
-  const splineGeom = r(splineBuilder.Curve());
-
-  const curve = r(splineGeom);
-  const edge = new Edge(new oc.BRepBuilderAPI_MakeEdge(curve).Edge());
-  gc();
-  return edge;
 };
 
 export const makeBezierCurve = (points: Point[]): Edge => {
   const oc = getOC();
-  const arrayOfPoints = new oc.NCollection_Array1_gp_Pnt(1, points.length);
-  points.forEach((p, i) => {
-    arrayOfPoints.SetValue(i + 1, asPnt(p));
-  });
-  const bezCurve = new oc.Geom_BezierCurve(arrayOfPoints);
+  const r = ocScope();
+  try {
+    const arrayOfPoints = r(
+      new oc.NCollection_Array1_gp_Pnt(1, points.length)
+    );
+    points.forEach((p, i) => {
+      arrayOfPoints.SetValue(i + 1, r(asPnt(p)));
+    });
+    const bezCurve = r(new oc.Geom_BezierCurve(arrayOfPoints));
 
-  const curve = bezCurve;
-  return new Edge(new oc.BRepBuilderAPI_MakeEdge(curve).Edge());
+    const curve = bezCurve;
+    return new Edge(r(new oc.BRepBuilderAPI_MakeEdge(curve)).Edge());
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makeTangentArc = (
@@ -248,19 +276,24 @@ export const makeTangentArc = (
   endPoint: Point
 ): Edge => {
   const oc = getOC();
-  const [r, gc] = localGC();
-  const circleGeom = r(
-    new oc.GC_MakeArcOfCircle(
-      r(asPnt(startPoint)),
-      new Vector(startTgt).wrapped,
-      r(asPnt(endPoint))
-    ).Value()
-  );
+  const r = ocScope();
+  try {
+    const circleGeom = r(
+      r(
+        new oc.GC_MakeArcOfCircle(
+          r(asPnt(startPoint)),
+          r(new Vector(startTgt)).wrapped,
+          r(asPnt(endPoint))
+        )
+      ).Value()
+    );
 
-  const curve = r(circleGeom);
-  const edge = new Edge(r(new oc.BRepBuilderAPI_MakeEdge(curve)).Edge());
-  gc();
-  return edge;
+    const curve = r(circleGeom);
+    const edge = new Edge(r(new oc.BRepBuilderAPI_MakeEdge(curve)).Edge());
+    return edge;
+  } finally {
+    r.dispose();
+  }
 };
 
 /*
@@ -273,7 +306,19 @@ const assembleEdgesAsWire = (listOfEdges: (Edge)[]): Wire => {
 
 export const assembleWire = (listOfEdges: (Edge | Wire)[]): Wire => {
   const oc = getOC();
-  const wireBuilder = new oc.BRepBuilderAPI_MakeWire();
+  const r = ocScope();
+  try {
+    return buildWire(oc, r(new oc.BRepBuilderAPI_MakeWire()), listOfEdges);
+  } finally {
+    r.dispose();
+  }
+};
+
+const buildWire = (
+  oc: ReturnType<typeof getOC>,
+  wireBuilder: InstanceType<ReturnType<typeof getOC>["BRepBuilderAPI_MakeWire"]>,
+  listOfEdges: (Edge | Wire)[]
+): Wire => {
   listOfEdges.forEach((e) => {
     if (e instanceof Edge) {
       wireBuilder.Add(e.wrapped);
@@ -302,9 +347,7 @@ export const assembleWire = (listOfEdges: (Edge | Wire)[]): Wire => {
     );
   }
 
-  const wire = new Wire(wireBuilder.Wire());
-  wireBuilder.delete();
-  return wire;
+  return new Wire(wireBuilder.Wire());
 };
 
 export const makeFace = (wire: Wire, holes?: Wire[]): Face => {
@@ -325,52 +368,57 @@ export const makeFace = (wire: Wire, holes?: Wire[]): Face => {
 
 export const makeNewFaceWithinFace = (originFace: Face, wire: Wire) => {
   const oc = getOC();
-  const [r, gc] = localGC();
-  const surface = r(oc.BRep_Tool.Surface(originFace.wrapped));
-  const faceBuilder = r(
-    new oc.BRepBuilderAPI_MakeFace(surface, wire.wrapped, true)
-  );
-  const face = faceBuilder.Face();
-  gc();
+  const r = ocScope();
+  try {
+    const surface = r(oc.BRep_Tool.Surface(originFace.wrapped));
+    const faceBuilder = r(
+      new oc.BRepBuilderAPI_MakeFace(surface, wire.wrapped, true)
+    );
+    const face = faceBuilder.Face();
 
-  return new Face(face);
+    return new Face(face);
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makeNonPlanarFace = (wire: Wire): Face => {
   const oc = getOC();
-  const [r, gc] = localGC();
-
-  const faceBuilder = r(
-    new oc.BRepOffsetAPI_MakeFilling(
-      3,
-      15,
-      2,
-      false,
-      1e-5,
-      1e-4,
-      1e-2,
-      0.1,
-      8,
-      9
-    )
-  );
-  wire.edges.forEach((edge) => {
-    faceBuilder.Add(
-      r(edge).wrapped,
-      oc.GeomAbs_Shape.GeomAbs_C0,
-      true
+  const r = ocScope();
+  try {
+    const faceBuilder = r(
+      new oc.BRepOffsetAPI_MakeFilling(
+        3,
+        15,
+        2,
+        false,
+        1e-5,
+        1e-4,
+        1e-2,
+        0.1,
+        8,
+        9
+      )
     );
-  });
+    wire.edges.forEach((edge) => {
+      faceBuilder.Add(
+        r(edge).wrapped,
+        oc.GeomAbs_Shape.GeomAbs_C0,
+        true
+      );
+    });
 
-  faceBuilder.Build();
-  const newFace = cast(faceBuilder.Shape());
+    faceBuilder.Build();
+    const newFace = cast(faceBuilder.Shape());
 
-  gc();
-
-  if (!(newFace instanceof Face)) {
-    throw new Error("Failed to create a face");
+    if (!(newFace instanceof Face)) {
+      newFace.delete();
+      throw new Error("Failed to create a face");
+    }
+    return newFace;
+  } finally {
+    r.dispose();
   }
-  return newFace;
 };
 
 /**
@@ -411,32 +459,38 @@ export const makeSphere = (radius: number): Solid => {
 class EllpsoidTransform extends WrappingObj<gp_GTrsf> {
   constructor(x: number, y: number, z: number) {
     const oc = getOC();
-    const r = GCWithScope();
+    const r = ocScope();
+    try {
+      const xyRatio = Math.sqrt((x * y) / z);
+      const xzRatio = x / xyRatio;
+      const yzRatio = y / xyRatio;
 
-    const xyRatio = Math.sqrt((x * y) / z);
-    const xzRatio = x / xyRatio;
-    const yzRatio = y / xyRatio;
+      const transform = new oc.gp_GTrsf();
+      transform.SetAffinity(r(makeAx1([0, 0, 0], [0, 1, 0])), xzRatio);
+      const xy = r(new oc.gp_GTrsf());
+      xy.SetAffinity(r(makeAx1([0, 0, 0], [0, 0, 1])), xyRatio);
+      const yz = r(new oc.gp_GTrsf());
+      yz.SetAffinity(r(makeAx1([0, 0, 0], [1, 0, 0])), yzRatio);
 
-    const transform = new oc.gp_GTrsf();
-    transform.SetAffinity(makeAx1([0, 0, 0], [0, 1, 0]), xzRatio);
-    const xy = r(new oc.gp_GTrsf());
-    xy.SetAffinity(makeAx1([0, 0, 0], [0, 0, 1]), xyRatio);
-    const yz = r(new oc.gp_GTrsf());
-    yz.SetAffinity(makeAx1([0, 0, 0], [1, 0, 0]), yzRatio);
+      transform.Multiply(xy);
+      transform.Multiply(yz);
 
-    transform.Multiply(xy);
-    transform.Multiply(yz);
-
-    super(transform);
+      super(transform);
+    } finally {
+      r.dispose();
+    }
   }
 
   applyToPoint(p: gp_Pnt): gp_Pnt {
     const oc = getOC();
-    const r = GCWithScope();
-
-    const coords = r(p.XYZ());
-    this.wrapped.Transforms(coords);
-    return new oc.gp_Pnt(coords);
+    const r = ocScope();
+    try {
+      const coords = r(p.XYZ());
+      this.wrapped.Transforms(coords);
+      return new oc.gp_Pnt(coords);
+    } finally {
+      r.dispose();
+    }
   }
 }
 
@@ -451,30 +505,37 @@ export const makeEllipsoid = (
   cLength: number
 ): Solid => {
   const oc = getOC();
-  const r = GCWithScope();
+  const r = ocScope();
+  try {
+    const sphere = r(new oc.gp_Sphere());
+    sphere.SetRadius(1);
 
-  const sphere = r(new oc.gp_Sphere());
-  sphere.SetRadius(1);
+    const sphericalSurface = r(new oc.Geom_SphericalSurface(sphere));
 
-  const sphericalSurface = r(new oc.Geom_SphericalSurface(sphere));
+    const baseSurface = r(
+      oc.GeomConvert.SurfaceToBSplineSurface(r(sphericalSurface.UReversed()))
+    );
 
-  const baseSurface = oc.GeomConvert.SurfaceToBSplineSurface(
-    sphericalSurface.UReversed()
-  );
+    const transform = r(new EllpsoidTransform(aLength, bLength, cLength));
 
-  const transform = new EllpsoidTransform(aLength, bLength, cLength);
-
-  for (let u = 1; u <= baseSurface.NbUPoles(); u++) {
-    for (let v = 1; v <= baseSurface.NbVPoles(); v++) {
-      const newPoint = transform.applyToPoint(baseSurface.Pole(u, v));
-      baseSurface.SetPole(u, v, newPoint);
+    for (let u = 1; u <= baseSurface.NbUPoles(); u++) {
+      for (let v = 1; v <= baseSurface.NbVPoles(); v++) {
+        const newPoint = r(transform.applyToPoint(r(baseSurface.Pole(u, v))));
+        baseSurface.SetPole(u, v, newPoint);
+      }
     }
-  }
-  const shell = cast(
-    r(new oc.BRepBuilderAPI_MakeShell(baseSurface.UReversed(), false)).Shell()
-  ) as Shell;
+    const shell = r(
+      cast(
+        r(
+          new oc.BRepBuilderAPI_MakeShell(r(baseSurface.UReversed()), false)
+        ).Shell()
+      ) as Shell
+    );
 
-  return makeSolid([shell]);
+    return makeSolid([shell]);
+  } finally {
+    r.dispose();
+  }
 };
 
 /**
@@ -484,10 +545,15 @@ export const makeEllipsoid = (
  */
 export const makeBox = (corner1: Point, corner2: Point): Solid => {
   const oc = getOC();
-  const boxMaker = new oc.BRepPrimAPI_MakeBox(asPnt(corner1), asPnt(corner2));
-  const box = new Solid(boxMaker.Solid());
-  boxMaker.delete();
-  return box;
+  const r = ocScope();
+  try {
+    const boxMaker = r(
+      new oc.BRepPrimAPI_MakeBox(r(asPnt(corner1)), r(asPnt(corner2)))
+    );
+    return new Solid(boxMaker.Solid());
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makeVertex = (point: Point): Vertex => {
@@ -497,6 +563,7 @@ export const makeVertex = (point: Point): Vertex => {
   const vertexMaker = new oc.BRepBuilderAPI_MakeVertex(pnt);
   const vertex = vertexMaker.Vertex();
   vertexMaker.delete();
+  pnt.delete();
 
   return new Vertex(vertex);
 };
@@ -519,10 +586,17 @@ export const makeOffset = (
     false
   );
 
-  const newShape = cast(downcast(offsetBuilder.Shape()));
-  offsetBuilder.delete();
+  let newShape: AnyShape;
+  try {
+    newShape = cast(offsetBuilder.Shape());
+  } finally {
+    offsetBuilder.delete();
+  }
 
-  if (!isShape3D(newShape)) throw new Error("Could not offset to a 3d shape");
+  if (!isShape3D(newShape)) {
+    newShape.delete();
+    throw new Error("Could not offset to a 3d shape");
+  }
   return newShape;
 };
 
@@ -536,6 +610,7 @@ export const compoundShapes = (shapeArray: AnyShape[]): AnyShape => {
     builder.Add(compound, s.wrapped);
     s.delete();
   });
+  builder.delete();
 
   const newShape = cast(compound);
   return newShape;
@@ -545,19 +620,22 @@ export const makeCompound = compoundShapes;
 
 function _weld(facesOrShells: Array<Face | Shell>): AnyShape {
   const oc = getOC();
-  const r = GCWithScope();
+  const r = ocScope();
+  try {
+    const shellBuilder = r(
+      new oc.BRepBuilderAPI_Sewing(1e-6, true, true, true, false)
+    );
 
-  const shellBuilder = r(
-    new oc.BRepBuilderAPI_Sewing(1e-6, true, true, true, false)
-  );
+    facesOrShells.forEach(({ wrapped }) => {
+      shellBuilder.Add(wrapped);
+    });
 
-  facesOrShells.forEach(({ wrapped }) => {
-    shellBuilder.Add(wrapped);
-  });
+    shellBuilder.Perform();
 
-  shellBuilder.Perform();
-
-  return cast(downcast(shellBuilder.SewedShape()));
+    return cast(shellBuilder.SewedShape());
+  } finally {
+    r.dispose();
+  }
 }
 
 /** Welds faces and shells into a single shell.
@@ -587,34 +665,41 @@ export function weldShellsAndFaces(
  * @category Solids
  **/
 export function makeSolid(facesOrShells: Array<Face | Shell>): Solid {
-  const r = GCWithScope();
-  const oc = getOC();
-  const shell = _weld(facesOrShells);
-  const solid = cast(r(new oc.ShapeFix_Solid()).SolidFromShell(shell.wrapped));
+  const r = ocScope();
+  try {
+    const oc = getOC();
+    const shell = r(_weld(facesOrShells));
+    const solid = cast(r(new oc.ShapeFix_Solid()).SolidFromShell(shell.wrapped));
 
-  if (!(solid instanceof Solid))
-    throw new Error("Could not make a solid of faces and shells");
+    if (!(solid instanceof Solid)) {
+      solid.delete();
+      throw new Error("Could not make a solid of faces and shells");
+    }
 
-  return solid;
+    return solid;
+  } finally {
+    r.dispose();
+  }
 }
 
 export const addHolesInFace = (face: Face, holes: Wire[]): Face => {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
+  try {
+    const faceMaker = r(new oc.BRepBuilderAPI_MakeFace(face.wrapped));
+    holes.forEach((wire) => {
+      faceMaker.Add(wire.wrapped);
+    });
 
-  const faceMaker = r(new oc.BRepBuilderAPI_MakeFace(face.wrapped));
-  holes.forEach((wire) => {
-    faceMaker.Add(wire.wrapped);
-  });
+    const builtFace = r(faceMaker.Face());
 
-  const builtFace = r(faceMaker.Face());
-
-  const fixer = r(new oc.ShapeFix_Face(builtFace));
-  fixer.FixOrientation();
-  const newFace = fixer.Face();
-
-  gc();
-  return new Face(newFace);
+    const fixer = r(new oc.ShapeFix_Face(builtFace));
+    fixer.FixOrientation();
+    const newFace = fixer.Face();
+    return new Face(newFace);
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makePolygon = (points: Point[]): Face => {
@@ -623,5 +708,11 @@ export const makePolygon = (points: Point[]): Face => {
   const edges = zip([points, [...points.slice(1), points[0]]]).map(
     ([p1, p2]: any) => makeLine(p1, p2)
   );
-  return makeFace(assembleWire(edges));
+  const r = ocScope();
+  try {
+    edges.forEach(r);
+    return makeFace(r(assembleWire(edges)));
+  } finally {
+    r.dispose();
+  }
 };

@@ -14,6 +14,7 @@ export class EdgeFinder extends Finder3d<Edge> {
   clone(): EdgeFinder {
     const ef = new EdgeFinder();
     ef.filters = [...this.filters];
+    this._shareResourcesWith(ef);
     return ef;
   }
 
@@ -68,7 +69,7 @@ export class EdgeFinder extends Finder3d<Edge> {
     if (typeof plane !== "string" && plane instanceof Plane)
       return this.atAngleWith(plane.zDir, 90);
     if (typeof plane !== "string" && plane.normalAt) {
-      const normal = plane.normalAt();
+      const normal = this._own(plane.normalAt());
       this.atAngleWith(normal, 90);
       return this;
     }
@@ -84,10 +85,11 @@ export class EdgeFinder extends Finder3d<Edge> {
    * @category Filter
    */
   inPlane(inputPlane: PlaneName | Plane, origin?: Point | number): this {
-    const plane =
+    const plane = this._own(
       inputPlane instanceof Plane
         ? makePlane(inputPlane)
-        : makePlane(inputPlane, origin);
+        : makePlane(inputPlane, origin)
+    );
 
     this.parallelTo(plane);
 
@@ -96,6 +98,8 @@ export class EdgeFinder extends Finder3d<Edge> {
       const projectedPoint = point.projectToPlane(plane);
 
       const isSamePoint = point.equals(projectedPoint);
+      point.delete();
+      projectedPoint.delete();
 
       return isSamePoint;
     };
@@ -108,17 +112,27 @@ export class EdgeFinder extends Finder3d<Edge> {
     let normal: Vector | null = null;
 
     try {
-      normal = element.tangentAt().normalized();
+      const tangent = element.tangentAt();
+      try {
+        normal = tangent.normalized();
+      } finally {
+        tangent.delete();
+      }
     } catch (error) {
       console.error("failed to compute a normal", error);
     }
 
-    return this.filters.every((filter) => filter({ normal, element }));
+    try {
+      return this.filters.every((filter) => filter({ normal, element }));
+    } finally {
+      normal?.delete();
+    }
   }
 
   protected applyFilter(shape: AnyShape): Edge[] {
     return shape.edges.filter((edge: Edge) => {
       const shouldKeep = this.shouldKeep(edge);
+      if (!shouldKeep) edge.delete();
       return shouldKeep;
     });
   }

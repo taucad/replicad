@@ -1,7 +1,7 @@
 import type { TopoDS_Face } from "replicad-opencascadejs";
 
 import { getOC } from "../oclib.js";
-import { GCWithScope } from "../register.js";
+import { ocScope } from "../register.js";
 import { unwrapShape, type ShapeInput } from "./shapeInput.js";
 
 export interface MeshOptions {
@@ -175,54 +175,57 @@ export function triangulateFace(
 ): FaceTriangulation | null {
   const oc = getOC();
   const face = unwrapShape(faceInput);
-  const r = GCWithScope();
+  const r = ocScope();
+  try {
+    const location = r(new oc.TopLoc_Location());
+    const triangulation = r(oc.BRep_Tool.Triangulation(face, location, 0));
 
-  const location = r(new oc.TopLoc_Location());
-  const triangulation = r(oc.BRep_Tool.Triangulation(face, location, 0));
+    if (!triangulation || triangulation.isNull()) return null;
 
-  if (!triangulation || triangulation.isNull()) return null;
+    const transformation = r(location.Transformation());
+    const result: FaceTriangulation = {
+      vertices: [],
+      trianglesIndexes: [],
+      verticesNormals: [],
+    };
 
-  const transformation = r(location.Transformation());
-  const result: FaceTriangulation = {
-    vertices: [],
-    trianglesIndexes: [],
-    verticesNormals: [],
-  };
+    const nbNodes = triangulation.NbNodes();
+    result.vertices = new Array(nbNodes * 3);
+    for (let i = 1; i <= nbNodes; i++) {
+      const point = r(r(triangulation.Node(i)).Transformed(transformation));
+      result.vertices[(i - 1) * 3] = point.X();
+      result.vertices[(i - 1) * 3 + 1] = point.Y();
+      result.vertices[(i - 1) * 3 + 2] = point.Z();
+    }
 
-  const nbNodes = triangulation.NbNodes();
-  result.vertices = new Array(nbNodes * 3);
-  for (let i = 1; i <= nbNodes; i++) {
-    const point = r(r(triangulation.Node(i)).Transformed(transformation));
-    result.vertices[(i - 1) * 3] = point.X();
-    result.vertices[(i - 1) * 3 + 1] = point.Y();
-    result.vertices[(i - 1) * 3 + 2] = point.Z();
+    const isForward = face.Orientation() === oc.TopAbs_Orientation.TopAbs_FORWARD;
+    const normalSign = isForward ? 1 : -1;
+
+    if (!triangulation.HasNormals()) triangulation.ComputeNormals();
+    result.verticesNormals = new Array(nbNodes * 3);
+    for (let i = 1; i <= nbNodes; i++) {
+      const normal = r(r(triangulation.Normal(i)).Transformed(transformation));
+      result.verticesNormals[(i - 1) * 3] = normal.X() * normalSign;
+      result.verticesNormals[(i - 1) * 3 + 1] = normal.Y() * normalSign;
+      result.verticesNormals[(i - 1) * 3 + 2] = normal.Z() * normalSign;
+    }
+
+    const nbTriangles = triangulation.NbTriangles();
+    result.trianglesIndexes = new Array(nbTriangles * 3);
+    for (let nt = 1; nt <= nbTriangles; nt++) {
+      const triangle = r(triangulation.Triangle(nt));
+      let n1 = triangle.Value(1);
+      let n2 = triangle.Value(2);
+      const n3 = triangle.Value(3);
+      if (!isForward) [n1, n2] = [n2, n1];
+
+      result.trianglesIndexes[(nt - 1) * 3] = n1 - 1 + index0;
+      result.trianglesIndexes[(nt - 1) * 3 + 1] = n2 - 1 + index0;
+      result.trianglesIndexes[(nt - 1) * 3 + 2] = n3 - 1 + index0;
+    }
+
+    return result;
+  } finally {
+    r.dispose();
   }
-
-  const isForward = face.Orientation() === oc.TopAbs_Orientation.TopAbs_FORWARD;
-  const normalSign = isForward ? 1 : -1;
-
-  if (!triangulation.HasNormals()) triangulation.ComputeNormals();
-  result.verticesNormals = new Array(nbNodes * 3);
-  for (let i = 1; i <= nbNodes; i++) {
-    const normal = r(r(triangulation.Normal(i)).Transformed(transformation));
-    result.verticesNormals[(i - 1) * 3] = normal.X() * normalSign;
-    result.verticesNormals[(i - 1) * 3 + 1] = normal.Y() * normalSign;
-    result.verticesNormals[(i - 1) * 3 + 2] = normal.Z() * normalSign;
-  }
-
-  const nbTriangles = triangulation.NbTriangles();
-  result.trianglesIndexes = new Array(nbTriangles * 3);
-  for (let nt = 1; nt <= nbTriangles; nt++) {
-    const triangle = r(triangulation.Triangle(nt));
-    let n1 = triangle.Value(1);
-    let n2 = triangle.Value(2);
-    const n3 = triangle.Value(3);
-    if (!isForward) [n1, n2] = [n2, n1];
-
-    result.trianglesIndexes[(nt - 1) * 3] = n1 - 1 + index0;
-    result.trianglesIndexes[(nt - 1) * 3 + 1] = n2 - 1 + index0;
-    result.trianglesIndexes[(nt - 1) * 3 + 2] = n3 - 1 + index0;
-  }
-
-  return result;
 }

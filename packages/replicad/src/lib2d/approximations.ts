@@ -4,7 +4,7 @@ import type {
 } from "replicad-opencascadejs";
 import { findCurveType } from "../definitionMaps";
 import { getOC } from "../oclib";
-import { GCWithScope } from "../register";
+import { ocScope } from "../register";
 import { Curve2D } from "./Curve2D";
 import { samePoint } from "./vectorOperations";
 
@@ -15,26 +15,29 @@ export const approximateAsBSpline = (
   maxSegments = 200
 ): Curve2D => {
   const oc = getOC();
-  const r = GCWithScope();
+  const r = ocScope();
+  try {
+    const continuities: Record<string, GeomAbs_Shape> = {
+      C0: oc.GeomAbs_Shape.GeomAbs_C0 as GeomAbs_Shape,
+      C1: oc.GeomAbs_Shape.GeomAbs_C1 as GeomAbs_Shape,
+      C2: oc.GeomAbs_Shape.GeomAbs_C2 as GeomAbs_Shape,
+      C3: oc.GeomAbs_Shape.GeomAbs_C3 as GeomAbs_Shape,
+    };
 
-  const continuities: Record<string, GeomAbs_Shape> = {
-    C0: oc.GeomAbs_Shape.GeomAbs_C0 as GeomAbs_Shape,
-    C1: oc.GeomAbs_Shape.GeomAbs_C1 as GeomAbs_Shape,
-    C2: oc.GeomAbs_Shape.GeomAbs_C2 as GeomAbs_Shape,
-    C3: oc.GeomAbs_Shape.GeomAbs_C3 as GeomAbs_Shape,
-  };
+    const convert = r(
+      new oc.Geom2dConvert_ApproxCurve(
+        adaptor.ShallowCopy(),
+        tolerance,
+        continuities[continuity],
+        maxSegments,
+        3
+      )
+    );
 
-  const convert = r(
-    new oc.Geom2dConvert_ApproxCurve(
-      adaptor.ShallowCopy(),
-      tolerance,
-      continuities[continuity],
-      maxSegments,
-      3
-    )
-  );
-
-  return new Curve2D(convert.Curve());
+    return new Curve2D(convert.Curve());
+  } finally {
+    r.dispose();
+  }
 };
 
 export const BSplineToBezier = (adaptor: Geom2dAdaptor_Curve): Curve2D[] => {
@@ -82,52 +85,55 @@ export function approximateAsSvgCompatibleCurve(
     maxSegments: 300,
   }
 ): Curve2D[] {
-  const r = GCWithScope();
+  const r = ocScope();
+  try {
+    return curves.flatMap((curve) => {
+      const adaptor = r(curve.adaptor());
+      const curveType = findCurveType(adaptor.GetType());
+      const midpointParameter =
+        0.5 * (curve.firstParameter + curve.lastParameter);
 
-  return curves.flatMap((curve) => {
-    const adaptor = r(curve.adaptor());
-    const curveType = findCurveType(adaptor.GetType());
-    const midpointParameter =
-      0.5 * (curve.firstParameter + curve.lastParameter);
+      if (
+        curveType === "ELLIPSE" ||
+        (curveType === "CIRCLE" && samePoint(curve.firstPoint, curve.lastPoint))
+      ) {
+        return curve.splitAt([midpointParameter]);
+      }
 
-    if (
-      curveType === "ELLIPSE" ||
-      (curveType === "CIRCLE" && samePoint(curve.firstPoint, curve.lastPoint))
-    ) {
-      return curve.splitAt([midpointParameter]);
-    }
-
-    if (["LINE", "ELLIPSE", "CIRCLE"].includes(curveType)) {
-      return curve;
-    }
-
-    if (curveType === "BEZIER_CURVE") {
-      const b = adaptor.Bezier();
-      const deg = b.Degree();
-
-      if (!b.IsRational() && [1, 2, 3].includes(deg)) {
+      if (["LINE", "ELLIPSE", "CIRCLE"].includes(curveType)) {
         return curve;
       }
-    }
 
-    if (curveType === "BSPLINE_CURVE") {
-      const bspline = adaptor.BSpline();
+      if (curveType === "BEZIER_CURVE") {
+        const b = adaptor.Bezier();
+        const deg = b.Degree();
 
-      if (!bspline.IsRational()) {
-        const c = BSplineToBezier(adaptor);
-        return approximateAsSvgCompatibleCurve(c, options);
+        if (!b.IsRational() && [1, 2, 3].includes(deg)) {
+          return curve;
+        }
       }
-    }
 
-    const bspline = approximateAsBSpline(
-      adaptor,
-      options.tolerance,
-      options.continuity,
-      options.maxSegments
-    );
-    return approximateAsSvgCompatibleCurve(
-      BSplineToBezier(r(bspline.adaptor())),
-      options
-    );
-  });
+      if (curveType === "BSPLINE_CURVE") {
+        const bspline = adaptor.BSpline();
+
+        if (!bspline.IsRational()) {
+          const c = BSplineToBezier(adaptor);
+          return approximateAsSvgCompatibleCurve(c, options);
+        }
+      }
+
+      const bspline = approximateAsBSpline(
+        adaptor,
+        options.tolerance,
+        options.continuity,
+        options.maxSegments
+      );
+      return approximateAsSvgCompatibleCurve(
+        BSplineToBezier(r(bspline.adaptor())),
+        options
+      );
+    });
+  } finally {
+    r.dispose();
+  }
 }

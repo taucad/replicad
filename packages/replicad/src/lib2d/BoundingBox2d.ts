@@ -1,4 +1,4 @@
-import { WrappingObj, GCWithScope } from "../register.js";
+import { ocScope, WrappingObj } from "../register.js";
 import { getOC } from "../oclib.js";
 import type { Bnd_Box2d } from "replicad-opencascadejs";
 
@@ -63,8 +63,12 @@ export class BoundingBox2d extends WrappingObj<Bnd_Box2d> {
   }
 
   containsPoint(other: Point2D): boolean {
-    const r = GCWithScope();
-    const point = r(pnt(other));
-    return !this.wrapped.IsOut(point);
+    const r = ocScope();
+    try {
+      const point = r(pnt(other));
+      return !this.wrapped.IsOut(point);
+    } finally {
+      r.dispose();
+    }
   }
 }

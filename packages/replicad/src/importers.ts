@@ -1,6 +1,6 @@
 import { cast } from "./shapes";
 import { getOC } from "./oclib";
-import { localGC } from "./register";
+import { ocScope, type OcScope } from "./register";
 import { MeshShape } from "./meshShapes";
 import { getManifold } from "./manifoldlib";
 import { _runOperation, getOperationCache } from "./operationCacheHook";
@@ -10,16 +10,15 @@ const uniqueId = () =>
 
 type ReadContext = {
   oc: ReturnType<typeof getOC>;
-  r: ReturnType<typeof localGC>[0];
-  gc: ReturnType<typeof localGC>[1];
+  /** Owns the reader's temporaries; the read disposes it. */
+  r: OcScope;
   fileName: string;
 };
 
 /** What an import sets up before it reads the file, in the original order. */
 const startImport = (): ReadContext => {
   const oc = getOC();
-  const [r, gc] = localGC();
-  return { oc, r, gc, fileName: uniqueId() };
+  return { oc, r: ocScope(), fileName: uniqueId() };
 };
 
 /**
@@ -43,22 +42,25 @@ export async function importSTEP(STLBlob: Blob) {
   });
 }
 
-function readSTEP({ oc, r, gc, fileName }: ReadContext, bufferView: Uint8Array) {
-  oc.FS.writeFile(`/${fileName}`, bufferView);
+function readSTEP({ oc, r, fileName }: ReadContext, bufferView: Uint8Array) {
+  try {
+    oc.FS.writeFile(`/${fileName}`, bufferView);
 
-  const reader = r(new oc.STEPControl_Reader());
-  if (reader.ReadFile(fileName)) {
-    oc.FS.unlink("/" + fileName);
-    reader.TransferRoots();
-    const stepShape = r(reader.OneShape());
-
-    const shape = cast(stepShape);
-    gc();
-    return shape;
-  } else {
-    oc.FS.unlink("/" + fileName);
-    gc();
-    throw new Error("Failed to load STEP file");
+    const reader = r(new oc.STEPControl_Reader());
+    if (reader.ReadFile(fileName)) {
+      oc.FS.unlink("/" + fileName);
+      reader.TransferRoots();
+      const stepShape = r(reader.OneShape());
+      // cast consumes the handle, and leaves it to the scope if it throws.
+      const shape = cast(stepShape);
+      r.keep(stepShape);
+      return shape;
+    } else {
+      oc.FS.unlink("/" + fileName);
+      throw new Error("Failed to load STEP file");
+    }
+  } finally {
+    r.dispose();
   }
 }
 
@@ -88,32 +90,35 @@ export async function importSTL(STLBlob: Blob) {
   });
 }
 
-function readSTL({ oc, r, gc, fileName }: ReadContext, bufferView: Uint8Array) {
-  oc.FS.writeFile(`/${fileName}`, bufferView);
+function readSTL({ oc, r, fileName }: ReadContext, bufferView: Uint8Array) {
+  try {
+    oc.FS.writeFile(`/${fileName}`, bufferView);
 
-  const reader = r(new oc.StlAPI_Reader());
-  const readShape = r(new oc.TopoDS_Shell());
+    const reader = r(new oc.StlAPI_Reader());
+    const readShape = r(new oc.TopoDS_Shell());
 
-  if (reader.Read(readShape, fileName)) {
-    oc.FS.unlink("/" + fileName);
+    if (reader.Read(readShape, fileName)) {
+      oc.FS.unlink("/" + fileName);
 
-    const shapeUpgrader = r(
-      new oc.ShapeUpgrade_UnifySameDomain(readShape, true, true, false)
-    );
-    shapeUpgrader.Build();
-    const upgradedShape = r(shapeUpgrader.Shape());
+      const shapeUpgrader = r(
+        new oc.ShapeUpgrade_UnifySameDomain(readShape, true, true, false)
+      );
+      shapeUpgrader.Build();
+      const upgradedShape = r(shapeUpgrader.Shape());
 
-    const solidSTL = r(new oc.BRepBuilderAPI_MakeSolid());
-    solidSTL.Add(oc.TopoDS.Shell(upgradedShape));
-    const asSolid = r(solidSTL.Solid());
-
-    const shape = cast(asSolid);
-    gc();
-    return shape;
-  } else {
-    oc.FS.unlink("/" + fileName);
-    gc();
-    throw new Error("Failed to load STL file");
+      const solidSTL = r(new oc.BRepBuilderAPI_MakeSolid());
+      solidSTL.Add(r(oc.TopoDS.Shell(upgradedShape)));
+      const asSolid = r(solidSTL.Solid());
+      // cast consumes the handle, and leaves it to the scope if it throws.
+      const shape = cast(asSolid);
+      r.keep(asSolid);
+      return shape;
+    } else {
+      oc.FS.unlink("/" + fileName);
+      throw new Error("Failed to load STL file");
+    }
+  } finally {
+    r.dispose();
   }
 }
 

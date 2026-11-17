@@ -51,14 +51,27 @@ export function lookFromPlane(projectionPlane: ProjectionPlane) {
   return new ProjectionCamera([0, 0, 0], dir, xAxis);
 }
 
+/** A Vector copied from an OpenCascade value the caller owns, then deleted. */
+const takeVector = (value: { XYZ: () => any; delete: () => void }): Vector => {
+  try {
+    return new Vector(value);
+  } finally {
+    value.delete();
+  }
+};
+
 function defaultXDir(direction: Direction) {
   const dir = makeDirVector(direction);
-  let yAxis: Point = new Vector([0, 0, 1]);
-  let xAxis: Point = yAxis.cross(dir);
+  let yAxis = new Vector([0, 0, 1]);
+  let xAxis = yAxis.cross(dir);
   if (xAxis.Length === 0) {
+    yAxis.delete();
+    xAxis.delete();
     yAxis = new Vector([0, 1, 0]);
     xAxis = yAxis.cross(dir);
   }
+  yAxis.delete();
+  dir.delete();
   return xAxis.normalize();
 }
 
@@ -69,43 +82,59 @@ export class ProjectionCamera extends WrappingObj<gp_Ax2> {
     xAxis?: Direction
   ) {
     const xDir = xAxis ? makeDirVector(xAxis) : defaultXDir(direction);
-    const ax2 = makeAx2(position, direction, xDir);
+    let ax2;
+    try {
+      ax2 = makeAx2(position, direction, xDir);
+    } finally {
+      xDir.delete();
+    }
     super(ax2);
   }
 
   get position() {
-    return new Vector(this.wrapped.Location());
+    return takeVector(this.wrapped.Location());
   }
 
   get direction() {
-    return new Vector(this.wrapped.Direction());
+    return takeVector(this.wrapped.Direction());
   }
 
   get xAxis() {
-    return new Vector(this.wrapped.XDirection());
+    return takeVector(this.wrapped.XDirection());
   }
 
   get yAxis() {
-    return new Vector(this.wrapped.YDirection());
+    return takeVector(this.wrapped.YDirection());
   }
 
   autoAxes() {
-    const xAxis = defaultXDir(this.direction);
-    this.wrapped.SetXDirection(asDir(xAxis));
+    const direction = this.direction;
+    const xAxis = defaultXDir(direction);
+    const xDir = asDir(xAxis);
+    this.wrapped.SetXDirection(xDir);
+    xDir.delete();
+    xAxis.delete();
+    direction.delete();
   }
 
   setPosition(position: Point) {
-    this.wrapped.SetLocation(asPnt(position));
+    const pnt = asPnt(position);
+    this.wrapped.SetLocation(pnt);
+    pnt.delete();
     return this;
   }
 
   setXAxis(xAxis: Direction) {
-    this.wrapped.SetYDirection(asDir(xAxis));
+    const dir = asDir(xAxis);
+    this.wrapped.SetYDirection(dir);
+    dir.delete();
     return this;
   }
 
   setYAxis(yAxis: Direction) {
-    this.wrapped.SetYDirection(asDir(yAxis));
+    const dir = asDir(yAxis);
+    this.wrapped.SetYDirection(dir);
+    dir.delete();
     return this;
   }
 
@@ -113,9 +142,15 @@ export class ProjectionCamera extends WrappingObj<gp_Ax2> {
     const lootAtPoint = new Vector(
       "boundingBox" in shape ? shape.boundingBox.center : shape
     );
-    const direction = this.position.sub(lootAtPoint).normalized();
+    const position = this.position;
+    const offset = position.sub(lootAtPoint);
+    const direction = offset.normalized();
+    const dir = direction.toDir();
 
-    this.wrapped.SetDirection(direction.toDir());
+    this.wrapped.SetDirection(dir);
+    [dir, direction, offset, position, lootAtPoint].forEach((value) =>
+      value.delete()
+    );
     this.autoAxes();
     return this;
   }

@@ -5,12 +5,16 @@ import type {
   BRepExtrema_DistShapeShape,
   GProp_GProps,
 } from "replicad-opencascadejs";
-import { GCWithScope, WrappingObj } from "./register";
+import { ocScope, WrappingObj } from "./register";
 class PhysicalProperties extends WrappingObj<GProp_GProps> {
   get centerOfMass(): [number, number, number] {
-    const r = GCWithScope();
-    const pnt = r(this.wrapped.CentreOfMass());
-    return [pnt.X(), pnt.Y(), pnt.Z()];
+    const r = ocScope();
+    try {
+      const pnt = r(this.wrapped.CentreOfMass());
+      return [pnt.X(), pnt.Y(), pnt.Z()];
+    } finally {
+      r.dispose();
+    }
   }
 }
 
@@ -71,7 +75,12 @@ export function measureShapeVolumeProperties(
  * @category Measure
  */
 export function measureVolume(shape: Shape3D) {
-  return measureShapeVolumeProperties(shape).volume;
+  const properties = measureShapeVolumeProperties(shape);
+  try {
+    return properties.volume;
+  } finally {
+    properties.delete();
+  }
 }
 
 /**
@@ -80,7 +89,12 @@ export function measureVolume(shape: Shape3D) {
  * @category Measure
  */
 export function measureArea(shape: Face | Shape3D) {
-  return measureShapeSurfaceProperties(shape).area;
+  const properties = measureShapeSurfaceProperties(shape);
+  try {
+    return properties.area;
+  } finally {
+    properties.delete();
+  }
 }
 
 /**
@@ -89,7 +103,12 @@ export function measureArea(shape: Face | Shape3D) {
  * @category Measure
  */
 export function measureLength(shape: AnyShape) {
-  return measureShapeLinearProperties(shape).length;
+  const properties = measureShapeLinearProperties(shape);
+  try {
+    return properties.length;
+  } finally {
+    properties.delete();
+  }
 }
 
 export class DistanceTool extends WrappingObj<BRepExtrema_DistShapeShape> {
@@ -115,7 +134,12 @@ export function measureDistanceBetween(
   shape1: AnyShape,
   shape2: AnyShape
 ): number {
-  return new DistanceTool().distanceBetween(shape1, shape2);
+  const tool = new DistanceTool();
+  try {
+    return tool.distanceBetween(shape1, shape2);
+  } finally {
+    tool.delete();
+  }
 }
 
 export class DistanceQuery extends WrappingObj<BRepExtrema_DistShapeShape> {
