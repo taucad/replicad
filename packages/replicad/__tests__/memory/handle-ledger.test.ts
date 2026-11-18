@@ -12,6 +12,7 @@
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import * as replicad from "../../src/index";
 import { getOC } from "../../src/index";
+import { edgeToCurveOnPlane } from "../../src/curves";
 import {
   installHandleLedger,
   summarizeLeaks,
@@ -238,6 +239,43 @@ const ledgerCases: Record<string, () => void> = {
     const b = box();
     const projection = r.drawProjection(b, "front");
     del(projection.visible, projection.hidden, b);
+  },
+  "drawFaceOutline(curved edges)": () => {
+    const drawing = r.drawRoundedRectangle(20, 10, 3);
+    const solid = drawing.sketchOnPlane("XY").extrude(5);
+    const finder = new r.FaceFinder().inPlane("XY", 5);
+    const top = finder.find(solid, { unique: true });
+    del(r.drawFaceOutline(top), top, finder, solid, drawing);
+  },
+  "drawFaceOutline(cylindrical face)": () => {
+    const cylinder = r.makeCylinder(3, 10);
+    const finder = new r.FaceFinder().ofSurfaceType("CYLINDRE");
+    const side = finder.find(cylinder, { unique: true });
+    del(r.drawFaceOutline(side), side, finder, cylinder);
+  },
+  "drawProjection(curved edges)": () => {
+    const cylinder = r.makeCylinder(3, 10);
+    const camera = new r.ProjectionCamera([20, 20, 20], [-1, -1, -1]);
+    const projection = r.drawProjection(cylinder, camera);
+    del(projection.visible, projection.hidden, camera, cylinder);
+  },
+  "edgeToCurveOnPlane(curved edges)": () => {
+    const edges = [
+      r.makeCircle(5),
+      r.makeEllipse(5, 3),
+      r.makeBezierCurve([
+        [0, 0, 0],
+        [1, 2, 0],
+        [3, 1, 0],
+      ]),
+      r.makeBSplineApproximation([
+        [0, 0, 0],
+        [1, 2, 0],
+        [3, 1, 0],
+        [5, 4, 0],
+      ]),
+    ];
+    for (const edge of edges) del(edgeToCurveOnPlane(edge), edge);
   },
   "serialize/deserialize": () => {
     const b = box();
