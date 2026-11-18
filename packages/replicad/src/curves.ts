@@ -269,7 +269,7 @@ export function edgeToCurve(e: Edge, face: Face): Curve2D {
     const adaptor = r(new oc.BRepAdaptor_Curve2d(e.wrapped, face.wrapped));
 
     const trimmed = new oc.Geom2d_TrimmedCurve(
-      adaptor.Curve(),
+      r(adaptor.Curve()),
       adaptor.FirstParameter(),
       adaptor.LastParameter(),
       true,
@@ -368,22 +368,31 @@ export function edgeToCurveOnPlane(e: Edge): Curve2D {
     }
 
     if (curveType === "CIRCLE") {
-      const circle = adaptor.Circle();
-      const curveCopy = new oc.Geom2d_Circle(
-        r(new oc.gp_Circ2d(axis3dTo2d(r(circle.Position()), r), circle.Radius()))
+      const circle = r(adaptor.Circle());
+      const curveCopy = r(
+        new oc.Geom2d_Circle(
+          r(
+            new oc.gp_Circ2d(
+              axis3dTo2d(r(circle.Position()), r),
+              circle.Radius()
+            )
+          )
+        )
       );
 
       return wrapAndTrim(curveCopy);
     }
 
     if (curveType === "ELLIPSE") {
-      const ellipse = adaptor.Ellipse();
-      const curveCopy = new oc.Geom2d_Ellipse(
-        r(
-          new oc.gp_Elips2d(
-            axis3dTo2d(r(ellipse.Position()), r),
-            ellipse.MajorRadius(),
-            ellipse.MinorRadius()
+      const ellipse = r(adaptor.Ellipse());
+      const curveCopy = r(
+        new oc.Geom2d_Ellipse(
+          r(
+            new oc.gp_Elips2d(
+              axis3dTo2d(r(ellipse.Position()), r),
+              ellipse.MajorRadius(),
+              ellipse.MinorRadius()
+            )
           )
         )
       );
@@ -392,7 +401,7 @@ export function edgeToCurveOnPlane(e: Edge): Curve2D {
     }
 
     if (curveType === "BEZIER_CURVE") {
-      const bezier = adaptor.Bezier();
+      const bezier = r(adaptor.Bezier());
       const poles = poles3dTo2d(r(bezier.Poles()), r);
       const curveCopy = bezier.IsRational()
         ? new oc.Geom2d_BezierCurve(poles, bezier.Weights())
@@ -406,21 +415,21 @@ export function edgeToCurveOnPlane(e: Edge): Curve2D {
     }
 
     if (curveType === "BSPLINE_CURVE") {
-      const bspline = adaptor.BSpline();
+      const bspline = r(adaptor.BSpline());
       const poles = poles3dTo2d(r(bspline.Poles()), r);
       const curveCopy = bspline.IsRational()
         ? new oc.Geom2d_BSplineCurve(
             poles,
             bspline.Weights(),
-            bspline.Knots(),
-            bspline.Multiplicities(),
+            r(bspline.Knots()),
+            r(bspline.Multiplicities()),
             bspline.Degree(),
             bspline.IsPeriodic()
           )
         : new oc.Geom2d_BSplineCurve(
             poles,
-            bspline.Knots(),
-            bspline.Multiplicities(),
+            r(bspline.Knots()),
+            r(bspline.Multiplicities()),
             bspline.Degree(),
             bspline.IsPeriodic()
           );

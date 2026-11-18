@@ -40,6 +40,7 @@ import { CornerFinder } from "./finders/cornerFinder";
 import type { FinderFunction } from "./finders/definitions";
 import { fillet2D, chamfer2D } from "./blueprints/customCorners";
 import { edgeToCurve, edgeToCurveOnPlane } from "./curves";
+import { ocScope } from "./register";
 import { BSplineApproximationConfig } from "./shapeHelpers";
 import { approximateForSVG } from "./blueprints/approximations";
 import { SingleFace } from "./finders";
@@ -641,12 +642,20 @@ export function drawProjection(
  * @category Drawing
  */
 export function drawFaceOutline(face: Face): Drawing {
-  const outerWire = face.clone().outerWire();
-  const curves = outerWire.edges.map((e) => edgeToCurve(e, face));
+  const r = ocScope();
+  try {
+    const outerWire = r(face.clone().outerWire());
+    const edges = outerWire.edges;
+    edges.forEach((edge) => r(edge));
+    const curves = edges.map((e) => r(edgeToCurve(e, face)));
 
-  const stitchedCurves = stitchCurves(curves).map((s) => new Blueprint(s));
-  if (stitchedCurves.length === 0) return new Drawing();
-  if (stitchedCurves.length === 1) return new Drawing(stitchedCurves[0]);
+    const stitchedCurves = stitchCurves(curves).map((s) => new Blueprint(s));
+    curves.forEach((curve) => r.keep(curve));
+    if (stitchedCurves.length === 0) return new Drawing();
+    if (stitchedCurves.length === 1) return new Drawing(stitchedCurves[0]);
 
-  return new Drawing(new Blueprints(stitchedCurves));
+    return new Drawing(new Blueprints(stitchedCurves));
+  } finally {
+    r.dispose();
+  }
 }
