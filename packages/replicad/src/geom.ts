@@ -523,9 +523,12 @@ export class Transformation extends WrappingObj<gp_Trsf> {
       false,
       false
     );
-    const transformed = transformer.Shape();
-    transformer.delete();
-    return transformed;
+    try {
+      return transformer.Shape();
+    } finally {
+      // The transformer keeps its own copy of the whole moved shape.
+      transformer.delete();
+    }
   }
 }
 

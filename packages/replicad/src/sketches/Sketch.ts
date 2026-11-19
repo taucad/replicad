@@ -1,4 +1,5 @@
-import { Vector, Plane, Point } from "../geom.js";
+import { extrudeFaceUntil } from "./extrudeUntil";
+import { Vector, Plane, Point, AxisName } from "../geom.js";
 import { ocScope, type OcScope } from "../register.js";
 import { makeFace, makeNewFaceWithinFace } from "../shapeHelpers.js";
 import {
@@ -13,7 +14,7 @@ import {
   LoftConfig,
 } from "../addThickness.js";
 import { Face, Shape3D, Wire } from "../shapes.js";
-import { SketchInterface } from "./lib.js";
+import { ExtrudeUntilOptions, SketchInterface } from "./lib.js";
 import { _runStep, _stepWanted, _userCallback } from "../operationCacheHook";
 
 /**
@@ -129,7 +130,7 @@ export default class Sketch implements SketchInterface {
    * (defaults to the sketch origin)
    */
   revolve(
-    revolutionAxis?: Point,
+    revolutionAxis?: Point | AxisName,
     { origin, angle }: { origin?: Point; angle?: number } = {}
   ): Shape3D {
     const face = makeFace(this.wire);
@@ -142,6 +143,32 @@ export default class Sketch implements SketchInterface {
     face.delete();
     this.delete();
     return solid;
+  }
+
+  /**
+   * Extrudes this sketch up to a limiting face, returning only the new solid.
+   * The face is not modified or consumed. The sketch's default direction is
+   * used unless overridden; the reverse direction is tried if needed.
+   * The finite, trimmed limiting face must fully cap the extrusion once
+   * without crossing the profile. Use a trimmed face for closed surfaces.
+   * The sketch is consumed on success, like `extrude`, but retained on failure.
+   */
+  extrudeUntil(
+    limitingFace: Face,
+    { extrusionDirection }: ExtrudeUntilOptions = {}
+  ): Shape3D {
+    const r = ocScope();
+    try {
+      const solid = extrudeFaceUntil(
+        r(this.face()),
+        limitingFace,
+        extrusionDirection ?? this.defaultDirection
+      );
+      this.delete();
+      return solid;
+    } finally {
+      r.dispose();
+    }
   }
 
   /** Extrudes the sketch to a certain distance.(along the default direction
