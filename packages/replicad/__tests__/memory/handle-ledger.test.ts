@@ -35,6 +35,13 @@ const del = (...values: any[]) =>
 
 const r = replicad as any;
 const box = () => r.makeBaseBox(10, 10, 10);
+/** A square face of side `size` at height `z`, and a function deleting it. */
+const planarLimit = (size: number, z: number): [any, () => void] => {
+  const drawing = r.drawRectangle(size, size);
+  const sketch = drawing.sketchOnPlane("XY", z);
+  const face = sketch.face();
+  return [face, () => del(face, sketch, drawing)];
+};
 
 /** Operations, each deleting everything it was given. */
 const ledgerCases: Record<string, () => void> = {
@@ -302,6 +309,104 @@ const ledgerCases: Record<string, () => void> = {
       b
     );
   },
+  // Upstream 1.2: boolean options, shape finders, extrudeUntil, named revolve
+  // axes and the 2D boolean fixes.
+  "shape.fuse/cut/intersect(simplify: false)": () => {
+    const b = box();
+    const c = r.makeCylinder(3, 20);
+    del(
+      b.fuse(c, { simplify: false }),
+      b.cut(c, { simplify: false }),
+      b.intersect(c, { simplify: false }),
+      b,
+      c
+    );
+  },
+  "shape.fuseAll/cutAll(simplify: false)": () => {
+    const b = box();
+    const c = r.makeCylinder(3, 20);
+    const d = r.makeSphere(4);
+    del(
+      b.fuseAll([c, d], { simplify: false }),
+      b.cutAll([c, d], { simplify: false }),
+      b,
+      c,
+      d
+    );
+  },
+  "shape.findEdge/findEdges": () => {
+    const b = box();
+    del(
+      b.findEdge((e: any) => e.inDirection("Z").containsPoint([5, 5, 5])),
+      b.findEdges((e: any) => e.inDirection("Z")),
+      b
+    );
+  },
+  "shape.findFace/findFaces": () => {
+    const b = box();
+    del(
+      b.findFace((f: any) => f.inPlane("XY", 10)),
+      b.findFaces((f: any) => f.parallelTo("XY")),
+      b
+    );
+  },
+  "sketch.revolve(named axis)": () => {
+    const drawing = r.drawRectangle(4, 5);
+    const moved = drawing.translate(5, 0);
+    del(moved.sketchOnPlane("XZ").revolve("Z", { angle: 90 }), moved, drawing);
+  },
+  "sketch.extrudeUntil": () => {
+    const [limit, dropLimit] = planarLimit(40, 20);
+    const drawing = r.drawRectangle(4, 4);
+    del(drawing.sketchOnPlane("XY", 5).extrudeUntil(limit), drawing);
+    dropLimit();
+  },
+  "compoundSketch.extrudeUntil": () => {
+    const [limit, dropLimit] = planarLimit(40, 20);
+    const outer = r.drawRectangle(10, 10);
+    const hole = r.drawCircle(2);
+    const drawing = outer.cut(hole);
+    del(drawing.sketchOnPlane("XY", 5).extrudeUntil(limit), drawing, hole, outer);
+    dropLimit();
+  },
+  "sketches.extrudeUntil": () => {
+    const [limit, dropLimit] = planarLimit(40, 20);
+    const square = r.drawRectangle(4, 4);
+    const left = square.translate(-5, 0);
+    const right = square.translate(5, 0);
+    const drawing = left.fuse(right);
+    del(
+      drawing.sketchOnPlane("XY", 5).extrudeUntil(limit),
+      drawing,
+      left,
+      right,
+      square
+    );
+    dropLimit();
+  },
+  extrudeFaceUntil: () => {
+    const [limit, dropLimit] = planarLimit(40, 20);
+    const [profile, dropProfile] = planarLimit(4, 5);
+    del(r.extrudeFaceUntil(profile, limit, [0, 0, 1]));
+    dropProfile();
+    dropLimit();
+  },
+  "drawing.cut(several cutters)": () => {
+    const piece = r.drawRectangle(20, 10);
+    const circle = r.drawCircle(2);
+    const left = circle.translate(-5, 0);
+    const right = circle.translate(5, 0);
+    const cutters = left.fuse(right);
+    del(piece.cut(cutters), cutters, left, right, circle, piece);
+  },
+  "drawing.cut(outside an existing hole)": () => {
+    const outer = r.drawRectangle(20, 20);
+    const hole = r.drawCircle(3);
+    const holed = outer.cut(hole);
+    const circle = r.drawCircle(1);
+    const cutter = circle.translate(30, 30);
+    del(holed.cut(cutter), cutter, circle, holed, hole, outer);
+  },
   "workload: cut + fillet + meshEdges": () => {
     const b = box();
     const c = r.makeCylinder(3, 20);
@@ -355,6 +460,28 @@ const throwCases: Record<string, () => void> = {
       // expected
     }
     del(finder, b);
+  },
+  "shape.findEdge that fails": () => {
+    const b = box();
+    try {
+      b.findEdge((e: any) => e.inDirection("Z"));
+    } catch {
+      // expected
+    }
+    del(b);
+  },
+  "sketch.extrudeUntil that fails": () => {
+    // The limit misses part of the profile: the sketch is retained.
+    const [limit, dropLimit] = planarLimit(2, 20);
+    const drawing = r.drawRectangle(4, 4);
+    const sketch = drawing.sketchOnPlane("XY", 5);
+    try {
+      sketch.extrudeUntil(limit);
+    } catch {
+      // expected
+    }
+    del(sketch, drawing);
+    dropLimit();
   },
 };
 
