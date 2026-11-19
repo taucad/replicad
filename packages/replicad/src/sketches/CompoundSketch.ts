@@ -139,12 +139,15 @@ export default class CompoundSketch implements SketchInterface {
 
   face() {
     const baseFace = this.outerSketch.face();
-    const newFace = addHolesInFace(
-      baseFace,
-      this.innerSketches.map((s) => s.wire)
-    );
-
-    return newFace;
+    try {
+      return addHolesInFace(
+        baseFace,
+        this.innerSketches.map((s) => s.wire)
+      );
+    } finally {
+      // The face with holes is a new face built from a copy of this one.
+      baseFace.delete();
+    }
   }
 
   /**

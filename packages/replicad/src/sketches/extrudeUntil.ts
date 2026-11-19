@@ -1,7 +1,7 @@
 import type { TopoDS_Shape } from "replicad-opencascadejs";
 import { Point, Vector } from "../geom";
 import { getOC } from "../oclib";
-import { localGC } from "../register";
+import { ocScope } from "../register";
 import { cast, Face, Shape3D, Solid } from "../shapes";
 
 /**
@@ -16,7 +16,7 @@ function splitPrismUntil(
   extrusionVector: Vector
 ): Solid | null {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
   try {
     const prism = r(
       new oc.BRepPrimAPI_MakePrism(
@@ -27,10 +27,11 @@ function splitPrismUntil(
       )
     );
     if (!prism.IsDone()) return null;
+    // `Append` returns a new handle on the stored item: delete it.
     const argumentsList = r(new oc.NCollection_List_TopoDS_Shape());
-    argumentsList.Append(r(prism.Shape()));
+    r(argumentsList.Append(r(prism.Shape())));
     const toolsList = r(new oc.NCollection_List_TopoDS_Shape());
-    toolsList.Append(target.wrapped);
+    r(toolsList.Append(target.wrapped));
 
     const splitter = r(new oc.BRepAlgoAPI_Splitter());
     splitter.SetNonDestructive(true);
@@ -40,6 +41,7 @@ function splitPrismUntil(
     if (splitter.HasErrors() || !splitter.IsDone()) return null;
     const raw = r(splitter.Shape());
     if (raw.IsNull()) return null;
+    // `cast` consumes `raw`; the scope skips it once it is deleted.
     const result = r(cast(raw));
     const solids = result.solids.map(r);
     if (solids.length !== 2) return null;
@@ -74,7 +76,7 @@ function splitPrismUntil(
     if (!checker.IsValid()) return null;
     return solid.clone();
   } finally {
-    gc();
+    r.dispose();
   }
 }
 
@@ -91,7 +93,7 @@ export function extrudeFaceUntil(
   extrusionDirection: Point
 ): Shape3D {
   const oc = getOC();
-  const [r, gc] = localGC();
+  const r = ocScope();
   const failure = "Could not extrude the sketch to the limiting face";
 
   try {
@@ -155,6 +157,6 @@ export function extrudeFaceUntil(
       `${failure}: the face must fully cap the extrusion once without crossing the profile`
     );
   } finally {
-    gc();
+    r.dispose();
   }
 }

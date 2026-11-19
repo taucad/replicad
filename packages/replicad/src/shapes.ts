@@ -437,7 +437,12 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
     this: AnyShape,
     finderFcn: FinderFunction<EdgeFinder, AnyShape>
   ): Edge {
-    return finderFcn(new EdgeFinder(), this).find(this, { unique: true });
+    const finder = new EdgeFinder();
+    try {
+      return finderFcn(finder, this).find(this, { unique: true });
+    } finally {
+      finder.delete();
+    }
   }
 
   /**
@@ -450,7 +455,12 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
     this: AnyShape,
     finderFcn: FinderFunction<EdgeFinder, AnyShape>
   ): Edge[] {
-    return finderFcn(new EdgeFinder(), this).find(this);
+    const finder = new EdgeFinder();
+    try {
+      return finderFcn(finder, this).find(this);
+    } finally {
+      finder.delete();
+    }
   }
 
   /**
@@ -463,7 +473,12 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
     this: AnyShape,
     finderFcn: FinderFunction<FaceFinder, AnyShape>
   ): Face {
-    return finderFcn(new FaceFinder(), this).find(this, { unique: true });
+    const finder = new FaceFinder();
+    try {
+      return finderFcn(finder, this).find(this, { unique: true });
+    } finally {
+      finder.delete();
+    }
   }
 
   /**
@@ -476,7 +491,12 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
     this: AnyShape,
     finderFcn: FinderFunction<FaceFinder, AnyShape>
   ): Face[] {
-    return finderFcn(new FaceFinder(), this).find(this);
+    const finder = new FaceFinder();
+    try {
+      return finderFcn(finder, this).find(this);
+    } finally {
+      finder.delete();
+    }
   }
 
   get solids(): Solid[] {
