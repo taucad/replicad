@@ -37,6 +37,7 @@ bytes.
 | `ReplicadMeshExtractor.meshWithOptions(shape, tol, angTol, clean, userBreak)`, `extractWithOptions(shape, tol, angTol, skipNormals, clean, userBreak)` | `clean: true` is `mesh`/`extract`; `clean: false` keeps an existing triangulation that is at least as fine as requested. |
 | `ReplicadBooleanBatch.{Fuse,Cut,Common}WithOptions(..., useOBB, userBreak)` | `useOBB` turns on BOPAlgo's oriented-bounding-box prefilter (the plain forms pass `false`). |
 | `new ReplicadUserBreak(wordAddress, expectedValue, useHook)` | A cooperative stop. `new ReplicadUserBreak(0, 0, false)` is disabled and attaches no progress indicator. |
+| `ReplicadSurfaceCoordinates.AllocateNormals(size)`, `ReplicadSurfaceCoordinates.Extract(shape, normalsPtr, normalsSize, prototype)` | UVs (normalized by `BRepTools::UVBounds`) and tangent frames for every triangulated node, in the face extractors' vertex order, in one call (`ReplicadSurfaceData`: `getTexCoordsPtr()`, `getTexCoordsSize()`, `getTangentsPtr()`, `getTangentsSize()` as doubles; `getStatus()` 1 when a face has no UV nodes). Write the mesh's normals as doubles at the `AllocateNormals` buffer's `getPtr()`. It ports Tau's JavaScript loop operation for operation, with `Math.hypot` as V8 computes it and no floating-point contraction, so it returns the same doubles. |
 
 A `ReplicadUserBreak` stops the operation once the 32-bit integer at
 `wordAddress` differs from `expectedValue`, or once `oc.replicadUserBreak()`

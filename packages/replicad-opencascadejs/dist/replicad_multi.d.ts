@@ -33219,6 +33219,38 @@ declare class ReplicadStepModelTools {
   [Symbol.dispose](): void;
 }
 
+declare class ReplicadSurfaceCoordinates {
+  constructor();
+  static AllocateNormals(size: number): ReplicadSurfaceNormals;
+  static Extract(shape: TopoDS_Shape, normalsPtr: number, normalsSize: number, prototype: boolean): ReplicadSurfaceData;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+declare class ReplicadSurfaceData {
+  constructor();
+  constructor(other: ReplicadSurfaceData);
+  getTexCoordsPtr(): number;
+  getTexCoordsSize(): number;
+  getTangentsPtr(): number;
+  getTangentsSize(): number;
+  getStatus(): number;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
+declare class ReplicadSurfaceNormals {
+  constructor();
+  constructor(other: ReplicadSurfaceNormals);
+  getPtr(): number;
+  getSize(): number;
+  /** Releases the C++ object. The caller must ensure no further access. */
+  delete(): void;
+  [Symbol.dispose](): void;
+}
+
 declare class ReplicadUserBreak {
   constructor();
   constructor(wordAddress: number, expectedValue: number, useHook: boolean);
@@ -34295,6 +34327,9 @@ export type { ReplicadShapeHasher };
 export type { ReplicadShapeIdentity };
 export type { ReplicadShapeIdentityInfo };
 export type { ReplicadStepModelTools };
+export type { ReplicadSurfaceCoordinates };
+export type { ReplicadSurfaceData };
+export type { ReplicadSurfaceNormals };
 export type { ReplicadUserBreak };
 export type { STEPCAFControl_Writer };
 export type { STEPControl_Reader };
@@ -34779,6 +34814,9 @@ export type OpenCascadeInstance = {
   ReplicadShapeIdentity: typeof ReplicadShapeIdentity;
   ReplicadShapeIdentityInfo: typeof ReplicadShapeIdentityInfo;
   ReplicadStepModelTools: typeof ReplicadStepModelTools;
+  ReplicadSurfaceCoordinates: typeof ReplicadSurfaceCoordinates;
+  ReplicadSurfaceData: typeof ReplicadSurfaceData;
+  ReplicadSurfaceNormals: typeof ReplicadSurfaceNormals;
   ReplicadUserBreak: typeof ReplicadUserBreak;
   TColStd_IndexedDataMapOfStringString: typeof TColStd_IndexedDataMapOfStringString;
   TopoDS: typeof TopoDS;
