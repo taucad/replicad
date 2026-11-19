@@ -1,6 +1,6 @@
 {
   "name": "@taulabs/replicad",
-  "version": "1.2.0-beta.2",
+  "version": "1.2.1-beta.0",
   "description": "The library to build browser based 3D models with code (Tau fork)",
   "keywords": [
     "cad",
@@ -79,7 +79,7 @@
   "dependencies": {
     "@types/opentype.js": "^1.3.10",
     "flatbush": "^4.0.0",
-    "opentype.js": "1.3.4"
+    "opentype.js": "2.0.0"
   },
   "gitHead": "6cb4e3931f9e3e64fb320c474ae9fa33468eddc3"
 }

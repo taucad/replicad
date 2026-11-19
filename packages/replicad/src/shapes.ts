@@ -427,6 +427,78 @@ export class Shape<Type extends TopoDS_Shape> extends WrappingObj<Type> {
     return Array.from(iterTopo(this.wrapped, "face"), (face) => new Face(face));
   }
 
+  /**
+   * Finds a unique edge using a finder function, which receives a fresh
+   * EdgeFinder and this shape. Throws if there is not exactly one match.
+   *
+   * @category Finders
+   */
+  findEdge(
+    this: AnyShape,
+    finderFcn: FinderFunction<EdgeFinder, AnyShape>
+  ): Edge {
+    const finder = new EdgeFinder();
+    try {
+      return finderFcn(finder, this).find(this, { unique: true });
+    } finally {
+      finder.delete();
+    }
+  }
+
+  /**
+   * Finds all matching edges using a finder function, which receives a fresh
+   * EdgeFinder and this shape.
+   *
+   * @category Finders
+   */
+  findEdges(
+    this: AnyShape,
+    finderFcn: FinderFunction<EdgeFinder, AnyShape>
+  ): Edge[] {
+    const finder = new EdgeFinder();
+    try {
+      return finderFcn(finder, this).find(this);
+    } finally {
+      finder.delete();
+    }
+  }
+
+  /**
+   * Finds a unique face using a finder function, which receives a fresh
+   * FaceFinder and this shape. Throws if there is not exactly one match.
+   *
+   * @category Finders
+   */
+  findFace(
+    this: AnyShape,
+    finderFcn: FinderFunction<FaceFinder, AnyShape>
+  ): Face {
+    const finder = new FaceFinder();
+    try {
+      return finderFcn(finder, this).find(this, { unique: true });
+    } finally {
+      finder.delete();
+    }
+  }
+
+  /**
+   * Finds all matching faces using a finder function, which receives a fresh
+   * FaceFinder and this shape.
+   *
+   * @category Finders
+   */
+  findFaces(
+    this: AnyShape,
+    finderFcn: FinderFunction<FaceFinder, AnyShape>
+  ): Face[] {
+    const finder = new FaceFinder();
+    try {
+      return finderFcn(finder, this).find(this);
+    } finally {
+      finder.delete();
+    }
+  }
+
   get solids(): Solid[] {
     return Array.from(
       iterTopo(this.wrapped, "solid"),
@@ -702,6 +774,9 @@ export class _3DShape<Type extends TopoDS_Shape>
   /**
    * Builds a new shape out of the two, fused, shapes
    *
+   * Same-domain faces and edges are merged by default. Set
+   * `options.simplify` to `false` to skip this topology cleanup.
+   *
    * @category Shape Modifications
    */
   fuse(other: Shape3D, options: BooleanOperationOptions = {}): Shape3D {
@@ -728,7 +803,10 @@ export class _3DShape<Type extends TopoDS_Shape>
   }
 
   /**
-   * Builds a new shape by removing the tool tape from this shape
+   * Builds a new shape by removing the tool shape from this shape
+   *
+   * Same-domain faces and edges are merged by default. Set
+   * `options.simplify` to `false` to skip this topology cleanup.
    *
    * @category Shape Modifications
    */
@@ -757,6 +835,9 @@ export class _3DShape<Type extends TopoDS_Shape>
 
   /**
    * Builds a new shape by intersecting this shape and another
+   *
+   * Same-domain faces and edges are merged by default. Set
+   * `options.simplify` to `false` to skip this topology cleanup.
    *
    * @category Shape Modifications
    */

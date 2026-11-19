@@ -363,20 +363,22 @@ export default class Blueprint implements DrawingInterface {
   }
 
   intersects(other: Blueprint) {
-    const oc = getOC();
-    const intersector = new oc.Geom2dAPI_InterCurveCurve();
-
     if (this.boundingBox.isOut(other.boundingBox)) return false;
 
-    for (const myCurve of this.curves) {
-      for (const otherCurve of other.curves) {
-        if (myCurve.boundingBox.isOut(otherCurve.boundingBox)) continue;
+    const oc = getOC();
+    const intersector = new oc.Geom2dAPI_InterCurveCurve();
+    try {
+      for (const myCurve of this.curves) {
+        for (const otherCurve of other.curves) {
+          if (myCurve.boundingBox.isOut(otherCurve.boundingBox)) continue;
 
-        intersector.Init(myCurve.wrapped, otherCurve.wrapped, 1e-9);
-        if (intersector.NbPoints() || intersector.NbSegments()) return true;
+          intersector.Init(myCurve.wrapped, otherCurve.wrapped, 1e-9);
+          if (intersector.NbPoints() || intersector.NbSegments()) return true;
+        }
       }
+      return false;
+    } finally {
+      intersector.delete();
     }
-    intersector.delete();
-    return false;
   }
 }

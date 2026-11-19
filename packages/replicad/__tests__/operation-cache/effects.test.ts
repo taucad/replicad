@@ -261,6 +261,10 @@ const compound = (
       .sketchOnPlane(plane, offset) as any
   ).sketches[0];
 
+/** A planar face above the sketches, for `extrudeUntil`. */
+const limitFace = (): any =>
+  (drawRectangle(60, 60).sketchOnPlane("XY", 20) as any).face();
+
 type Case = () => { values: object[]; run: () => unknown };
 const consumptionCases: Record<string, Case> = {
   "Shape.translate": () => {
@@ -375,6 +379,31 @@ const consumptionCases: Record<string, Case> = {
     return {
       values: [...sketches.sketches, sketches],
       run: () => sketches.revolve(),
+    };
+  },
+  "Sketch.revolve (named axis)": () => {
+    const sketch = drawRectangle(2, 2).translate(5, 0).sketchOnPlane("XZ") as any;
+    return { values: [sketch], run: () => sketch.revolve("Z", { angle: 90 }) };
+  },
+  "Sketch.extrudeUntil": () => {
+    const sketch = sketchRectangle(4, 4);
+    const limit = limitFace();
+    return { values: [sketch, limit], run: () => sketch.extrudeUntil(limit) };
+  },
+  "CompoundSketch.extrudeUntil": () => {
+    const sketch = compound();
+    const limit = limitFace();
+    return { values: [sketch, limit], run: () => sketch.extrudeUntil(limit) };
+  },
+  "Sketches.extrudeUntil": () => {
+    const sketches = drawRectangle(10, 10)
+      .cut(drawCircle(2))
+      .fuse(drawCircle(3).translate(20, 0))
+      .sketchOnPlane() as any;
+    const limit = limitFace();
+    return {
+      values: [...sketches.sketches, sketches, limit],
+      run: () => sketches.extrudeUntil(limit),
     };
   },
   compoundShapes: () => {

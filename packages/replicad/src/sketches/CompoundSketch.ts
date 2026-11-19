@@ -1,3 +1,5 @@
+import { ocScope } from "../register";
+import { extrudeFaceUntil } from "./extrudeUntil";
 import {
   compoundShapes,
   addHolesInFace,
@@ -6,7 +8,7 @@ import {
 } from "../shapeHelpers";
 import Sketch from "./Sketch";
 
-import { Point, Vector } from "../geom.js";
+import { Point, AxisName, Vector } from "../geom.js";
 import {
   basicFaceExtrusion,
   complexExtrude,
@@ -15,7 +17,7 @@ import {
   ExtrusionProfile,
   LoftConfig,
 } from "../addThickness.js";
-import { SketchInterface } from "./lib.js";
+import { ExtrudeUntilOptions, SketchInterface } from "./lib.js";
 import { cast, Face, Shape3D, Shell, Wire } from "../shapes.js";
 import { getOC } from "../oclib.js";
 
@@ -137,12 +139,41 @@ export default class CompoundSketch implements SketchInterface {
 
   face() {
     const baseFace = this.outerSketch.face();
-    const newFace = addHolesInFace(
-      baseFace,
-      this.innerSketches.map((s) => s.wire)
-    );
+    try {
+      return addHolesInFace(
+        baseFace,
+        this.innerSketches.map((s) => s.wire)
+      );
+    } finally {
+      // The face with holes is a new face built from a copy of this one.
+      baseFace.delete();
+    }
+  }
 
-    return newFace;
+  /**
+   * Extrudes this sketch up to a limiting face, returning only the new solid.
+   * The face is not modified or consumed. The sketch's default direction is
+   * used unless overridden; the reverse direction is tried if needed.
+   * The finite, trimmed limiting face must fully cap the extrusion once
+   * without crossing the profile. Use a trimmed face for closed surfaces.
+   * The sketch is consumed on success, but retained on failure.
+   */
+  extrudeUntil(
+    limitingFace: Face,
+    { extrusionDirection }: ExtrudeUntilOptions = {}
+  ): Shape3D {
+    const r = ocScope();
+    try {
+      const solid = extrudeFaceUntil(
+        r(this.face()),
+        limitingFace,
+        extrusionDirection ?? this.outerSketch.defaultDirection
+      );
+      this.delete();
+      return solid;
+    } finally {
+      r.dispose();
+    }
   }
 
   extrude(
@@ -202,7 +233,7 @@ export default class CompoundSketch implements SketchInterface {
    * (defaults to the sketch origin)
    */
   revolve(
-    revolutionAxis?: Point,
+    revolutionAxis?: Point | AxisName,
     { origin, angle }: { origin?: Point; angle?: number } = {}
   ): Shape3D {
     const solid = revolution(

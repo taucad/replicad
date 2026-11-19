@@ -62,6 +62,7 @@ export function syncGeometries(
 
 /**
  * Update a threejs BufferGeometry from some meshed faces from replicad.
+ * Recomputes both bounding box and sphere so bounds are immediately available.
  */
 export function syncFaces(
   faces: BufferGeometry,
@@ -110,10 +111,12 @@ export function syncFaces(
   }
 
   faces.computeBoundingBox();
+  faces.computeBoundingSphere();
 }
 
 /**
  * Update a threejs BufferGeometry from meshed edges from replicad.
+ * Recomputes both bounding box and sphere so bounds are immediately available.
  */
 export function syncLines(
   lines: BufferGeometry,
@@ -124,6 +127,8 @@ export function syncLines(
   delete lines.userData.edgeGroups;
 
   lines.setAttribute("position", new Float32BufferAttribute(edges.lines, 3));
+  lines.computeBoundingBox();
+  lines.computeBoundingSphere();
 
   if (!edges) return;
   if (edges.edgeGroups) {
@@ -142,7 +147,8 @@ export function syncLines(
 
 /**
  * Update a threejs BufferGeometry from the faces buffer geometry
- * Uses threejs EdgesGeometry to guess the relevant edges
+ * Uses threejs EdgesGeometry to guess the relevant edges.
+ * Recomputes both bounding box and sphere so bounds are immediately available.
  */
 export function syncLinesFromFaces(
   lines: BufferGeometry,
@@ -152,6 +158,8 @@ export function syncLinesFromFaces(
   delete lines.userData.edgeGroups;
 
   lines.copy(new EdgesGeometry(faces, 2));
+  lines.computeBoundingBox();
+  lines.computeBoundingSphere();
 }
 
 // Finds the group a specific element is part of

@@ -23,6 +23,14 @@ import { iterTopo } from "./topology.js";
 
 export interface BooleanOperationOptions {
   optimisation?: "none" | "commonFace" | "sameFace";
+  /**
+   * Merge same-domain faces and edges after the Boolean operation.
+   * This cleans up topology; it does not simplify a mesh. Set to `false` to
+   * skip this cleanup, which can change downstream face and edge selection.
+   *
+   * @default true
+   */
+  simplify?: boolean;
 }
 
 export interface ShellOptions {
@@ -138,7 +146,7 @@ const runBooleanBatch = (
   operation: BooleanOperation,
   argumentShapes: readonly TopoDS_Shape[],
   toolShapes: readonly TopoDS_Shape[],
-  { optimisation = "none" }: BooleanOperationOptions = {}
+  { optimisation = "none", simplify = true }: BooleanOperationOptions = {}
 ): TopoDS_Shape => {
   const argumentsList = makeNCollection_List_TopoDS_Shape(argumentShapes);
   const toolsList = makeNCollection_List_TopoDS_Shape(toolShapes);
@@ -148,10 +156,10 @@ const runBooleanBatch = (
     const glue = glueOption(optimisation);
     const result =
       operation === "fuse"
-        ? batch.Fuse(allShapesList, false, glue, true, 1e-3, 0)
+        ? batch.Fuse(allShapesList, false, glue, simplify, 1e-3, 0)
         : operation === "cut"
-        ? batch.Cut(argumentsList, toolsList, false, glue, true, 1e-3, 0)
-        : batch.Common(allShapesList, false, glue, true, 1e-3, 0);
+        ? batch.Cut(argumentsList, toolsList, false, glue, simplify, 1e-3, 0)
+        : batch.Common(allShapesList, false, glue, simplify, 1e-3, 0);
 
     try {
       if (!result.IsDone() || result.HasErrors()) {
@@ -180,7 +188,7 @@ const runBuilderBoolean = (
   operation: BooleanOperation,
   shape: TopoDS_Shape,
   tools: readonly TopoDS_Shape[],
-  optimisation: BooleanOperationOptions["optimisation"]
+  { optimisation = "none", simplify = true }: BooleanOperationOptions
 ): TopoDS_Shape => {
   const oc = getOC();
   const r = ocScope();
@@ -199,7 +207,7 @@ const runBuilderBoolean = (
     builder.SetTools(toolsList);
     configureGlue(builder, optimisation);
     builder.Build();
-    builder.SimplifyResult(true, true, 1e-3);
+    if (simplify) builder.SimplifyResult(true, true, 1e-3);
     return builder.Shape();
   } finally {
     r.dispose();
@@ -213,7 +221,7 @@ const unwrapTools = (tools: Iterable<ShapeInput>): TopoDS_Shape[] =>
 export function fuseShapes(
   leftInput: ShapeInput,
   rightInput: ShapeInput,
-  { optimisation = "none" }: BooleanOperationOptions = {}
+  { optimisation = "none", simplify = true }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
   const batch = getBooleanBatch();
   if (batch) {
@@ -222,7 +230,7 @@ export function fuseShapes(
       "fuse",
       [unwrapShape(leftInput)],
       [unwrapShape(rightInput)],
-      { optimisation }
+      { optimisation, simplify }
     );
   }
 
@@ -230,7 +238,7 @@ export function fuseShapes(
     "fuse",
     unwrapShape(leftInput),
     [unwrapShape(rightInput)],
-    optimisation
+    { optimisation, simplify }
   );
 }
 
@@ -241,7 +249,7 @@ export function fuseShapes(
 export function fuseAllShapes(
   shapeInput: ShapeInput,
   othersInput: Iterable<ShapeInput>,
-  { optimisation = "none" }: BooleanOperationOptions = {}
+  { optimisation = "none", simplify = true }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
   const shape = unwrapShape(shapeInput);
   const others = unwrapTools(othersInput);
@@ -249,16 +257,19 @@ export function fuseAllShapes(
 
   const batch = getBooleanBatch();
   if (batch) {
-    return runBooleanBatch(batch, "fuse", [shape], others, { optimisation });
+    return runBooleanBatch(batch, "fuse", [shape], others, {
+      optimisation,
+      simplify,
+    });
   }
-  return runBuilderBoolean("fuse", shape, others, optimisation);
+  return runBuilderBoolean("fuse", shape, others, { optimisation, simplify });
 }
 
 /** Builds a raw shape by cutting a tool shape from another shape. */
 export function cutShape(
   shapeInput: ShapeInput,
   toolInput: ShapeInput,
-  { optimisation = "none" }: BooleanOperationOptions = {}
+  { optimisation = "none", simplify = true }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
   const batch = getBooleanBatch();
   if (batch) {
@@ -267,7 +278,7 @@ export function cutShape(
       "cut",
       [unwrapShape(shapeInput)],
       [unwrapShape(toolInput)],
-      { optimisation }
+      { optimisation, simplify }
     );
   }
 
@@ -275,7 +286,7 @@ export function cutShape(
     "cut",
     unwrapShape(shapeInput),
     [unwrapShape(toolInput)],
-    optimisation
+    { optimisation, simplify }
   );
 }
 
@@ -286,7 +297,7 @@ export function cutShape(
 export function cutAllShapes(
   shapeInput: ShapeInput,
   toolsInput: Iterable<ShapeInput>,
-  { optimisation = "none" }: BooleanOperationOptions = {}
+  { optimisation = "none", simplify = true }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
   const shape = unwrapShape(shapeInput);
   const tools = unwrapTools(toolsInput);
@@ -294,16 +305,19 @@ export function cutAllShapes(
 
   const batch = getBooleanBatch();
   if (batch) {
-    return runBooleanBatch(batch, "cut", [shape], tools, { optimisation });
+    return runBooleanBatch(batch, "cut", [shape], tools, {
+      optimisation,
+      simplify,
+    });
   }
-  return runBuilderBoolean("cut", shape, tools, optimisation);
+  return runBuilderBoolean("cut", shape, tools, { optimisation, simplify });
 }
 
 /** Builds a raw shape containing the intersection of two shapes. */
 export function intersectShapes(
   leftInput: ShapeInput,
   rightInput: ShapeInput,
-  { optimisation = "none" }: BooleanOperationOptions = {}
+  { optimisation = "none", simplify = true }: BooleanOperationOptions = {}
 ): TopoDS_Shape {
   const batch = getBooleanBatch();
   if (batch) {
@@ -312,7 +326,7 @@ export function intersectShapes(
       "common",
       [unwrapShape(leftInput)],
       [unwrapShape(rightInput)],
-      { optimisation }
+      { optimisation, simplify }
     );
   }
 
@@ -320,7 +334,7 @@ export function intersectShapes(
     "common",
     unwrapShape(leftInput),
     [unwrapShape(rightInput)],
-    optimisation
+    { optimisation, simplify }
   );
 }
 

@@ -38,6 +38,7 @@ import { makeBaseBox } from "./shortcuts";
 import * as addThickness from "./addThickness";
 import * as drawModule from "./draw";
 import * as cannedSketches from "./sketches/cannedSketches";
+import * as extrudeUntilModule from "./sketches/extrudeUntil";
 import * as textModule from "./text";
 import * as cannedBlueprints from "./blueprints/cannedBlueprints";
 import * as boolean2D from "./blueprints/boolean2D";
@@ -250,6 +251,7 @@ const implementations = {
   ...addThickness,
   ...drawModule,
   ...cannedSketches,
+  ...extrudeUntilModule,
   ...textModule,
   ...cannedBlueprints,
   ...boolean2D,

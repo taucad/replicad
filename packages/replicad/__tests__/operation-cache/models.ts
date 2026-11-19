@@ -14,6 +14,8 @@ import {
   drawCircle,
   drawRoundedRectangle,
   drawPolysides,
+  drawRectangle,
+  extrudeFaceUntil,
   sketchCircle,
   sketchRectangle,
   Sketcher,
@@ -170,6 +172,92 @@ export const corpus = (p: { width: number; hole: number; angle: number }) => {
   const ball = makeSphere(3).translateZ(30);
   const group = compoundShapes([ball, revolved]) as AnyShape;
   return [chamfered, bracket, cup, picked, loft, sweep, sketcher, group];
+};
+
+/**
+ * The operations upstream 1.2 added or changed: `extrudeUntil` on each sketch
+ * kind and `extrudeFaceUntil`, booleans without `simplify`, the shape finder
+ * helpers (whose selections feed a fillet, a chamfer, a compound and a
+ * limiting face), a revolve about a named axis and the 2D boolean fixes.
+ */
+export const upstreamOps = (p: {
+  limit: number;
+  hole: number;
+  simplify: boolean;
+}) => {
+  const limit = (drawRectangle(80, 80).sketchOnPlane("XY", p.limit) as any).face();
+  const post = (drawRectangle(6, 6).sketchOnPlane("XY", 2) as any).extrudeUntil(
+    limit
+  ) as Shape3D;
+  const tube = (
+    drawRectangle(14, 14)
+      .cut(drawCircle(p.hole))
+      .translate(20, 0)
+      .sketchOnPlane("XY", 2) as any
+  ).extrudeUntil(limit) as Shape3D;
+  const pair = (
+    drawCircle(2)
+      .translate(-20, 0)
+      .fuse(drawCircle(2).translate(-30, 0))
+      .sketchOnPlane("XY", 2) as any
+  ).extrudeUntil(limit) as Shape3D;
+  const profile = (
+    drawCircle(3).translate(0, 25).sketchOnPlane("XY", 2) as any
+  ).face();
+  const pin = extrudeFaceUntil(profile, limit, [0, 0, 1]);
+
+  const options = { simplify: p.simplify };
+  const block = makeBaseBox(30, 30, 10).translate(0, -40, 0);
+  const bore = makeCylinder(p.hole, 20, [0, -40, -5]);
+  const fused = block.fuse(bore, options);
+  const common = block.intersect(bore, options);
+  const all = block.fuseAll([bore, makeSphere(4).translate(0, -40, 10)], options);
+  const cut = block.cut(bore, options);
+
+  const corner = cut.findEdge((e) =>
+    e.inDirection("Z").containsPoint([15, -25, 5])
+  );
+  const rounded = cut.fillet(1, (e) => e.inList([corner]));
+  const verticals = cut.findEdges((e) => e.inDirection("Z"));
+  const chamfered = cut.chamfer(0.5, (e) => e.inList(verticals));
+  const flats = compoundShapes(cut.findFaces((f) => f.parallelTo("XY")));
+  const top = cut.findFace((f) => f.inPlane("XY", 10));
+  const peg = (
+    drawCircle(2).translate(10, -48).sketchOnPlane("XY", -10) as any
+  ).extrudeUntil(top) as Shape3D;
+
+  const revolved = (
+    drawRectangle(4, 6).translate(10, 0).sketchOnPlane("XZ") as any
+  ).revolve("Z", { angle: 270 }) as Shape3D;
+  const slotted = (
+    drawRectangle(30, 20)
+      .cut(drawCircle(2).translate(-8, 0).fuse(drawCircle(2).translate(8, 0)))
+      .sketchOnPlane("XY") as any
+  ).extrude(2) as Shape3D;
+  const holed = (
+    drawRectangle(20, 20)
+      .cut(drawCircle(3))
+      .cut(drawCircle(1).translate(30, 30))
+      .sketchOnPlane("XY", 5) as any
+  ).extrude(2) as Shape3D;
+
+  return [
+    post,
+    tube,
+    pair,
+    pin,
+    fused,
+    common,
+    all,
+    cut,
+    rounded,
+    chamfered,
+    flats,
+    peg,
+    revolved,
+    slotted,
+    holed,
+  ] as AnyShape[];
 };
 
 const meshTolerance = { tolerance: 0.05, angularTolerance: 0.2 };
