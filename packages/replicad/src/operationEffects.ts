@@ -156,7 +156,7 @@ export const classEffects = (): readonly ClassEffects[] => [
     routed: true,
     members: members({
       alias: "clone asShape3D",
-      pure: "serialize hashCode isNull isSame isEqual split simplify edges faces solids wires boundingBox mesh meshEdges blobSTEP blobSTL",
+      pure: "serialize hashCode isNull isSame isEqual split simplify edges faces solids wires findEdge findEdges findFace findFaces boundingBox mesh meshEdges blobSTEP blobSTL",
       consumes: "translate translateX translateY translateZ rotate mirror scale",
     }),
     unrouted: [
@@ -168,6 +168,12 @@ export const classEffects = (): readonly ClassEffects[] => [
       "meshEdges",
       "blobSTEP",
       "blobSTL",
+      // Selections of sub shapes: the finder's `find` reports them to the
+      // cache, as when user code runs the finder itself.
+      "findEdge",
+      "findEdges",
+      "findFace",
+      "findFaces",
     ],
     elementGetters: {
       edges: "edge",
@@ -222,7 +228,7 @@ export const classEffects = (): readonly ClassEffects[] => [
       pure: "baseFace defaultOrigin defaultDirection face wires faces",
       mutates: "set:baseFace set:defaultOrigin set:defaultDirection",
       alias: "clone",
-      consumes: "delete revolve extrude sweepSketch loftWith",
+      consumes: "delete revolve extrude extrudeUntil sweepSketch loftWith",
     }),
     unrouted: ["delete"],
     consume: {
@@ -239,7 +245,8 @@ export const classEffects = (): readonly ClassEffects[] => [
     members: members({
       pure: "outerSketch innerSketches face extrude revolve loftWith",
       // `wires` builds a compound of the sketches' wires, which deletes them.
-      consumes: "delete wires",
+      // `extrudeUntil` deletes the compound sketch.
+      consumes: "delete wires extrudeUntil",
     }),
     unrouted: ["delete"],
     routedGetters: ["wires"],
@@ -249,7 +256,10 @@ export const classEffects = (): readonly ClassEffects[] => [
     target: Sketches,
     op: "Sketches",
     routed: true,
-    members: members({ pure: "faces", consumes: "wires extrude revolve" }),
+    members: members({
+      pure: "faces",
+      consumes: "wires extrude extrudeUntil revolve",
+    }),
     consume: {
       // A compound of the members' wires: deletes them.
       wires: (receiver: Sketches) =>
@@ -260,6 +270,9 @@ export const classEffects = (): readonly ClassEffects[] => [
         ),
       extrude: consumePlainSketches,
       revolve: consumePlainSketches,
+      // Every sketch, plain or compound, is deleted once it is extruded.
+      extrudeUntil: (receiver: Sketches) =>
+        receiver.sketches.forEach((sketch) => sketch.delete()),
     },
   },
   {
@@ -619,6 +632,7 @@ export const ROUTED_FUNCTION_NAMES = [
   "complexExtrude",
   "twistExtrude",
   "loft",
+  "extrudeFaceUntil",
   "draw",
   "drawRoundedRectangle",
   "drawRectangle",

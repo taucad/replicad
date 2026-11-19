@@ -59,6 +59,7 @@ import type * as shapeHelpers from "./shapeHelpers";
 import type * as addThickness from "./addThickness";
 import type * as drawModule from "./draw";
 import type * as cannedSketches from "./sketches/cannedSketches";
+import type * as extrudeUntilModule from "./sketches/extrudeUntil";
 import type * as textModule from "./text";
 import type * as cannedBlueprints from "./blueprints/cannedBlueprints";
 import type * as boolean2D from "./blueprints/boolean2D";
@@ -146,6 +147,14 @@ export const supportExtrude: typeof addThickness.supportExtrude = routedFunction
 export const complexExtrude: typeof addThickness.complexExtrude = routedFunctions.complexExtrude;
 export const twistExtrude: typeof addThickness.twistExtrude = routedFunctions.twistExtrude;
 export const loft: typeof addThickness.loft = routedFunctions.loft;
+/**
+ * Builds only the extrusion from explicit geometry and direction. No face
+ * selection or sketch ownership rules are applied here. None of the inputs
+ * are consumed. The finite, trimmed limiting face must fully cap the sweep once
+ * and must not cross the profile. The supplied direction is preferred; its
+ * reverse is tried when it cannot reach a complete cap.
+ */
+export const extrudeFaceUntil: typeof extrudeUntilModule.extrudeFaceUntil = routedFunctions.extrudeFaceUntil;
 /**
  * Creates a drawing pen to programatically draw in 2D.
  *

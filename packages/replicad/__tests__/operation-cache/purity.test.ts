@@ -208,6 +208,13 @@ const functionFixtures: Record<string, Fixture> = {
   cutBlueprints: call(() => [blueprint(), drawCircle(2).blueprint], (a, b) => r.cutBlueprints(a, b)),
   intersectBlueprints: call(() => [blueprint(), drawCircle(2).blueprint], (a, b) => r.intersectBlueprints(a, b)),
   makeProjectedEdges: call(() => [box(), camera()], (s, c) => r.makeProjectedEdges(s, c)),
+  extrudeFaceUntil: call(
+    () => [
+      (drawRectangle(4, 4).sketchOnPlane("XY", 5) as any).face(),
+      (drawRectangle(40, 40).sketchOnPlane("XY", 20) as any).face(),
+    ],
+    (profile, limit) => r.extrudeFaceUntil(profile, limit, [0, 0, 1])
+  ),
 };
 const fontFunctions = ["drawText", "sketchText", "textBlueprints"];
 
