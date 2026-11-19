@@ -275,6 +275,9 @@ export default defineBuild({
     "ReplicadAbortWord",
     "ReplicadBinaryBrepData",
     "ReplicadBinaryBrep",
+    "ReplicadSurfaceNormals",
+    "ReplicadSurfaceData",
+    "ReplicadSurfaceCoordinates",
   ],
   customBindings: [
     // First: the mesh extractor and the Boolean batch use its indicator.
@@ -334,6 +337,14 @@ export default defineBuild({
     {
       file: "build-config/wrappers/binary-brep.cpp",
       symbols: ["ReplicadBinaryBrepData", "ReplicadBinaryBrep"],
+    },
+    {
+      file: "build-config/wrappers/surface-coordinates.cpp",
+      symbols: [
+        "ReplicadSurfaceNormals",
+        "ReplicadSurfaceData",
+        "ReplicadSurfaceCoordinates",
+      ],
     },
   ],
   settings: {
