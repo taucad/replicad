@@ -175,10 +175,50 @@ export const corpus = (p: { width: number; hole: number; angle: number }) => {
 };
 
 /**
+ * One boolean of each kind whose result `simplify` changes: two boxes that
+ * share a face (whose coplanar faces the cleanup merges), and booleans on a
+ * pair of boxes fused without the cleanup, whose split faces survive unless
+ * the boolean merges them. Each result depends on `simplify` through its own
+ * boolean only.
+ */
+const simplifySensitive = (options: { simplify: boolean }): AnyShape[] => {
+  const cube = () => makeBaseBox(10, 10, 10);
+  const split = () =>
+    cube().translate(60, 0, 0).fuse(cube().translate(70, 0, 0), {
+      simplify: false,
+    });
+  const cover = () => makeBaseBox(40, 40, 40).translate(65, 0, -5);
+  const notch = () => makeBaseBox(4, 4, 20).translate(57, 0, -5);
+  const left = cube().translate(60, 30, 0);
+  const pairFuse = left.fuse(cube().translate(70, 30, 0), options);
+  const pairCut = split().cut(notch(), options);
+  const pairCommon = split().intersect(cover(), options);
+  const allFuse = cube()
+    .translate(60, -30, 0)
+    .fuseAll(
+      [cube().translate(70, -30, 0), cube().translate(50, -30, 0)],
+      options
+    );
+  const allCut = split().cutAll(
+    [notch(), makeBaseBox(2, 2, 20).translate(72, 0, -5)],
+    options
+  );
+  const allCommon = split().intersectAll(
+    [cover(), cover().translateX(1)],
+    options
+  );
+  return [pairFuse, pairCut, pairCommon, allFuse, allCut, allCommon];
+};
+
+/** Positions of the `simplifySensitive` results in `upstreamOps`' output. */
+export const SIMPLIFY_SENSITIVE = [15, 16, 17, 18, 19, 20];
+
+/**
  * The operations upstream 1.2 added or changed: `extrudeUntil` on each sketch
  * kind and `extrudeFaceUntil`, booleans without `simplify`, the shape finder
  * helpers (whose selections feed a fillet, a chamfer, a compound and a
  * limiting face), a revolve about a named axis and the 2D boolean fixes.
+ * The last results are `simplifySensitive`'s.
  */
 export const upstreamOps = (p: {
   limit: number;
@@ -257,6 +297,7 @@ export const upstreamOps = (p: {
     revolved,
     slotted,
     holed,
+    ...simplifySensitive(options),
   ] as AnyShape[];
 };
 

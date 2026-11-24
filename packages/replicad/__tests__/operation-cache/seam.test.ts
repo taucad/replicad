@@ -2,7 +2,15 @@
  * Seam behavior with a resident cache: ports of the synthetic models the seam
  * was qualified with, and the W4 gates that apply to the library.
  */
-import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vitest";
 import {
   asPnt,
   bypassOperationCache,
@@ -17,8 +25,13 @@ import {
   deleteAll,
   finderClosure,
   fingerprint,
+  SIMPLIFY_SENSITIVE,
   upstreamOps,
 } from "./models";
+import {
+  installEmulatedBooleanBatch,
+  type EmulatedBooleanBatch,
+} from "../support/emulatedBooleanBatch";
 
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -223,57 +236,75 @@ describe("G-E1 parity: off, cold, resident", () => {
   });
 });
 
-describe("upstream 1.2 operations", () => {
-  const base = { limit: 20, hole: 4, simplify: true };
-  const steps = [
-    base,
-    { ...base, simplify: false },
-    base,
-    { ...base, limit: 25 },
-    base,
-    { ...base, hole: 5 },
-    base,
-  ];
+describe.each([
+  { path: "builder", batch: false },
+  { path: "batch binding (emulated)", batch: true },
+])(
+  "upstream 1.2 operations, $path path",
+  ({ batch }: { batch: boolean }) => {
+    let binding: EmulatedBooleanBatch | undefined;
+    beforeAll(() => {
+      if (batch) binding = installEmulatedBooleanBatch();
+    });
+    afterAll(() => binding?.uninstall());
 
-  test("every step equals reuse off; revisits are all hits; no opaque call", () => {
-    const { stats, truth } = history(upstreamOps, steps);
-    expect(truth[3]).not.toEqual(truth[0]);
-    expect(truth[5]).not.toEqual(truth[0]);
-    for (const s of stats) {
-      expect(s.reasons).toEqual({});
-      expect(s.opaque).toBe(0);
-    }
-    for (const index of [2, 4, 6]) expect(stats[index].misses).toBe(0);
-    expect(stats[1].misses).toBeGreaterThan(0);
-  });
-
-  test("randomized histories give the same outputs (history independence)", () => {
-    const options = [
+    const base = { limit: 20, hole: 4, simplify: true };
+    const steps = [
       base,
       { ...base, simplify: false },
+      base,
       { ...base, limit: 25 },
+      base,
       { ...base, hole: 5 },
+      base,
     ];
-    let seed = 11;
-    const random = () => {
-      seed = (seed * 1103515245 + 12345) % 2 ** 31;
-      return seed / 2 ** 31;
-    };
-    const truth = options.map((params) => offRun(upstreamOps, params));
-    for (let trial = 0; trial < 2; trial += 1) {
-      const cache = createTestCache();
-      setOperationCache(cache.cache);
-      for (let step = 0; step < 6; step += 1) {
-        const choice = Math.floor(random() * options.length);
-        expect(cachedRun(cache, upstreamOps, options[choice])).toEqual(
-          truth[choice]
+
+    test("every step equals reuse off; revisits are all hits; no opaque call", () => {
+      const { stats, truth } = history(upstreamOps, steps);
+      if (batch) expect(binding!.calls).toBeGreaterThan(0);
+      // `simplify` must reach every boolean: each sensitive result changes.
+      for (const index of SIMPLIFY_SENSITIVE)
+        expect(truth[1][index], `simplify, result ${index}`).not.toEqual(
+          truth[0][index]
         );
+      expect(truth[3]).not.toEqual(truth[0]);
+      expect(truth[5]).not.toEqual(truth[0]);
+      for (const s of stats) {
+        expect(s.reasons).toEqual({});
+        expect(s.opaque).toBe(0);
       }
-      setOperationCache(undefined);
-      cache.dispose();
-    }
-  });
-});
+      for (const index of [2, 4, 6]) expect(stats[index].misses).toBe(0);
+      expect(stats[1].misses).toBeGreaterThan(0);
+    });
+
+    test("randomized histories give the same outputs (history independence)", () => {
+      const options = [
+        base,
+        { ...base, simplify: false },
+        { ...base, limit: 25 },
+        { ...base, hole: 5 },
+      ];
+      let seed = 11;
+      const random = () => {
+        seed = (seed * 1103515245 + 12345) % 2 ** 31;
+        return seed / 2 ** 31;
+      };
+      const truth = options.map((params) => offRun(upstreamOps, params));
+      for (let trial = 0; trial < 2; trial += 1) {
+        const cache = createTestCache();
+        setOperationCache(cache.cache);
+        for (let step = 0; step < 6; step += 1) {
+          const choice = Math.floor(random() * options.length);
+          expect(cachedRun(cache, upstreamOps, options[choice])).toEqual(
+            truth[choice]
+          );
+        }
+        setOperationCache(undefined);
+        cache.dispose();
+      }
+    });
+  }
+);
 
 describe("G-E2 complete lineage", () => {
   test("G-E2 no opaque call on the corpus, cold or resident", () => {
