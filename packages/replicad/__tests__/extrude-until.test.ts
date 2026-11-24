@@ -388,6 +388,28 @@ describe("sketch.extrudeUntil", () => {
     expectValidSolid(recovered);
   });
 
+  it("has consumed the first sketch when the second one fails", () => {
+    const sketch = ownSketch(
+      drawRectangle(2, 2)
+        .translate(-5, 0)
+        .fuse(drawRectangle(2, 2).translate(5, 0))
+        .sketchOnPlane("XY", 5)
+    );
+    if (!(sketch instanceof Sketches)) throw new Error("expected Sketches");
+    const [first, second] = sketch.sketches;
+    const firstX = bounds(own(first.face()))[0][0];
+    // The limit covers the first profile only.
+    const limit = own(
+      ownSketch(
+        drawRectangle(6, 6).translate(firstX + 1, 0).sketchOnPlane("XY", 20)
+      ).face()
+    );
+    expect(() => sketch.extrudeUntil(limit)).toThrow();
+    expect(() => first.face()).toThrow("This object has been deleted");
+    expect(own(second.face()).geomType).toBe("PLANE");
+    expect(limit.geomType).toBe("PLANE");
+  });
+
   it("reverses direction when the limit is behind the sketch", () => {
     const result = own(sketchAt().extrudeUntil(limitAt(-10)));
     expect(volume(result)).toBeCloseTo(240);
