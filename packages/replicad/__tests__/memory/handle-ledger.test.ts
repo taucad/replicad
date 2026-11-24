@@ -483,6 +483,33 @@ const throwCases: Record<string, () => void> = {
     del(sketch, drawing);
     dropLimit();
   },
+  "sketches.extrudeUntil whose compound fails": () => {
+    // Both extrusions succeed (and consume their sketches); building the
+    // compound from them then fails on the second solid.
+    const [limit, dropLimit] = planarLimit(40, 20);
+    const square = r.drawRectangle(4, 4);
+    const left = square.translate(-5, 0);
+    const right = square.translate(5, 0);
+    const drawing = left.fuse(right);
+    const sketches = drawing.sketchOnPlane("XY", 5);
+    const builder = (getOC() as any).TopoDS_Builder.prototype;
+    const add = builder.Add;
+    let calls = 0;
+    builder.Add = function (this: unknown, ...args: unknown[]) {
+      calls += 1;
+      if (calls === 2) throw new Error("injected compound failure");
+      return add.apply(this, args);
+    };
+    try {
+      sketches.extrudeUntil(limit);
+    } catch {
+      // expected
+    } finally {
+      builder.Add = add;
+    }
+    del(sketches.sketches, drawing, left, right, square);
+    dropLimit();
+  },
 };
 
 describe("T4 throw paths: a failed operation leaves no handle behind", () => {
@@ -498,10 +525,12 @@ describe("T4 throw paths: a failed operation leaves no handle behind", () => {
         }
       };
       try {
+        const before = ledger.stats().doubleDeletes;
         const leaks = leaksOf(counting);
         if (leaks.length > 0)
           throw new Error(`Leaked handles:\n${leaks.join("\n")}`);
         expect(threw).toBe(0);
+        expect(ledger.stats().doubleDeletes - before, "double deletes").toBe(0);
       } finally {
         errors.mockRestore();
       }

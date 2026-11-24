@@ -604,13 +604,20 @@ export const compoundShapes = (shapeArray: AnyShape[]): AnyShape => {
   const oc = getOC();
   const builder = new oc.TopoDS_Builder();
   const compound = new oc.TopoDS_Compound();
-  builder.MakeCompound(compound);
+  try {
+    builder.MakeCompound(compound);
 
-  shapeArray.forEach((s) => {
-    builder.Add(compound, s.wrapped);
-    s.delete();
-  });
-  builder.delete();
+    // A failure leaves the shapes not yet added to the caller.
+    shapeArray.forEach((s) => {
+      builder.Add(compound, s.wrapped);
+      s.delete();
+    });
+  } catch (error) {
+    compound.delete();
+    throw error;
+  } finally {
+    builder.delete();
+  }
 
   const newShape = cast(compound);
   return newShape;

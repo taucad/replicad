@@ -1,6 +1,6 @@
 {
   "name": "@taulabs/replicad",
-  "version": "1.2.1-beta.0",
+  "version": "1.2.1-beta.1",
   "description": "The library to build browser based 3D models with code (Tau fork)",
   "keywords": [
     "cad",
@@ -57,7 +57,7 @@
     "build-doc": "typedoc --exclude \"../replicad-opencascadejs/*\" --out docs --theme default src",
     "build-docss": "typedoc --help",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.type-tests.json"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.58.12",

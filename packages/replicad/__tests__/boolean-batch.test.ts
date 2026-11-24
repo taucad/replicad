@@ -111,7 +111,6 @@ const assertPublicBooleanOptionsType = () => {
   base.cutAll([tool], { fuzzyValue: 0.01 });
   // @ts-expect-error OCCT implementation knobs are intentionally not stable public API.
   base.cutAll([tool], { nonDestructive: true });
-  // @ts-expect-error OCCT implementation knobs are intentionally not stable public API.
   base.cutAll([tool], { simplify: false });
 };
 
