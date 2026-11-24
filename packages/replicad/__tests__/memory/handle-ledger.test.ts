@@ -510,6 +510,35 @@ const throwCases: Record<string, () => void> = {
     del(sketches.sketches, drawing, left, right, square);
     dropLimit();
   },
+  "sketches.extrude whose compound cast fails": () => {
+    // Both extrusions succeed and the compound takes them over; casting the
+    // compound then fails (as a user break raised by any OpenCascade call
+    // would), so only compoundShapes can delete the compound.
+    const square = r.drawRectangle(4, 4);
+    const left = square.translate(-5, 0);
+    const right = square.translate(5, 0);
+    const drawing = left.fuse(right);
+    const sketches = drawing.sketchOnPlane("XY");
+    const oc = getOC() as any;
+    const Compound = oc.TopoDS_Compound;
+    oc.TopoDS_Compound = new Proxy(Compound, {
+      construct(target, args, newTarget) {
+        const compound = Reflect.construct(target, args, newTarget);
+        compound.ShapeType = () => {
+          throw new Error("injected compound cast failure");
+        };
+        return compound;
+      },
+    });
+    try {
+      sketches.extrude(5);
+    } catch {
+      // expected
+    } finally {
+      oc.TopoDS_Compound = Compound;
+    }
+    del(sketches.sketches, drawing, left, right, square);
+  },
 };
 
 describe("T4 throw paths: a failed operation leaves no handle behind", () => {
