@@ -1,0 +1,8 @@
+{
+  "//": "Test files that assert types (with @ts-expect-error). The other test files are not typechecked yet.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src", "__tests__/boolean-batch.test.ts"]
+}

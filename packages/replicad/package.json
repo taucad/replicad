@@ -57,7 +57,7 @@
     "build-doc": "typedoc --exclude \"../replicad-opencascadejs/*\" --out docs --theme default src",
     "build-docss": "typedoc --help",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.type-tests.json"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.58.12",
