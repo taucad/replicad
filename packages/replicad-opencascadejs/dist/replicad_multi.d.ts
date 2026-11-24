@@ -33150,6 +33150,7 @@ declare class ReplicadPrototypeMeshData {
 declare class ReplicadPrototypeMeshExtractor {
   constructor();
   static ExtractFaces(shape: TopoDS_Shape, tolerance: number, angularTolerance: number, skipNormals: boolean): ReplicadPrototypeMeshData;
+  static ExtractFacesWithOptions(shape: TopoDS_Shape, tolerance: number, angularTolerance: number, skipNormals: boolean, clean: boolean, userBreak: ReplicadUserBreak): ReplicadPrototypeMeshData;
   static ExtractEdges(shape: TopoDS_Shape, tolerance: number, angularTolerance: number): ReplicadPrototypeEdgeMeshData;
   static ExtractFaceIds(shape: TopoDS_Shape): ReplicadPrototypeIdData;
   static ExtractEdgeIds(shape: TopoDS_Shape, tolerance: number, angularTolerance: number): ReplicadPrototypeIdData;
