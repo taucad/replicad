@@ -8,7 +8,7 @@ import initSingle from "../dist/replicad_single.js";
 
 // Covers the additive entry points: binary BRep without triangulation and its
 // identity hash, the mesh extractor's explicit clean, the Boolean batch's OBB
-// flag, and the user break for batch Booleans and meshing. Each default path
+// flag, and the user break for batch Booleans and both mesh extractors. Each default path
 // must stay byte-identical to the entry point it extends.
 
 const distDir = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -113,6 +113,20 @@ const meshBytes = (oc, raw) => {
     part(raw.getNormalsPtr(), raw.getNormalsSize()),
     part(raw.getTrianglesPtr(), raw.getTrianglesSize()),
     part(raw.getFaceGroupsPtr(), raw.getFaceGroupsSize()),
+  ];
+  raw.delete();
+  return out;
+};
+
+// The prototype extractor returns doubles for vertices and normals.
+const prototypeMeshBytes = (oc, raw) => {
+  const buffer = oc.wasmMemory.buffer;
+  const part = (ptr, size, width) => new Uint8Array(buffer, ptr, size * width).slice();
+  const out = [
+    part(raw.getVerticesPtr(), raw.getVerticesSize(), 8),
+    part(raw.getNormalsPtr(), raw.getNormalsSize(), 8),
+    part(raw.getTrianglesPtr(), raw.getTrianglesSize(), 4),
+    part(raw.getFaceGroupsPtr(), raw.getFaceGroupsSize(), 4),
   ];
   raw.delete();
   return out;
@@ -294,6 +308,62 @@ for (const runtime of runtimes) {
 
     delete oc.replicadUserBreak;
     for (const item of [shape, hooked, byHook, intact, matching, broken, byWord, word, toolsList, argumentsList, plate, ...tools]) {
+      item.delete();
+    }
+  });
+
+  test(`${runtime.name}: the prototype extractor's ExtractFacesWithOptions matches ExtractFaces and a break stops it`, async () => {
+    const oc = await runtime.initialize();
+    // A located shape, so the prototype path strips a real location.
+    const source = sphere(oc, 10);
+    const shape = moved(oc, source, [5, -3, 2]);
+    const extractor = oc.ReplicadPrototypeMeshExtractor;
+
+    const reference = prototypeMeshBytes(oc, extractor.ExtractFaces(shape, 0.1, 0.5, false));
+    const userBreak = disabledBreak(oc);
+    const disabled = prototypeMeshBytes(oc, extractor.ExtractFacesWithOptions(shape, 0.1, 0.5, false, true, userBreak));
+    assert.deepEqual(disabled, reference, "a disabled break gives the bytes of ExtractFaces");
+
+    // An armed break whose word never moves attaches an indicator but must not change the mesh.
+    const word = new oc.ReplicadAbortWord();
+    const armed = new oc.ReplicadUserBreak(word.Address(), 0, false);
+    const armedMesh = prototypeMeshBytes(oc, extractor.ExtractFacesWithOptions(shape, 0.1, 0.5, false, true, armed));
+    assert.deepEqual(armedMesh, reference, "an armed break that never fires gives the same bytes");
+
+    const skipped = prototypeMeshBytes(oc, extractor.ExtractFaces(shape, 0.1, 0.5, true));
+    const skippedWithOptions = prototypeMeshBytes(oc, extractor.ExtractFacesWithOptions(shape, 0.1, 0.5, true, true, userBreak));
+    assert.deepEqual(skippedWithOptions, skipped, "skipNormals passes through");
+
+    // A set word stops the prototype mesh with the same error the regular extractor throws.
+    word.Store(7);
+    const stop = (userBreakSource) => {
+      try {
+        extractor.ExtractFacesWithOptions(shape, 0.01, 0.1, false, true, userBreakSource);
+      } catch (error) {
+        return oc.getExceptionMessage(error);
+      }
+      return undefined;
+    };
+    const byWord = stop(armed);
+    assert.ok(byWord, "a set word must stop the prototype mesh");
+    assert.match(byWord[0], /ReplicadUserBreakError/);
+    assert.equal(byWord[1], "ReplicadUserBreak");
+
+    // The hook source stops it too, after a few polls.
+    let polls = 0;
+    oc.replicadUserBreak = () => ++polls > 3;
+    const byHook = new oc.ReplicadUserBreak(0, 0, true);
+    const hooked = stop(byHook);
+    assert.ok(hooked, "the hook must stop the prototype mesh");
+    assert.match(hooked[0], /ReplicadUserBreakError/);
+    assert.ok(polls >= 4);
+    delete oc.replicadUserBreak;
+
+    // After a break the shape still meshes normally, to the reference bytes.
+    const after = prototypeMeshBytes(oc, extractor.ExtractFacesWithOptions(shape, 0.1, 0.5, false, true, userBreak));
+    assert.deepEqual(after, reference, "a stopped mesh leaves nothing that changes the next clean mesh");
+
+    for (const item of [byHook, armed, word, userBreak, shape, source]) {
       item.delete();
     }
   });

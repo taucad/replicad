@@ -1,0 +1,71 @@
+name: "Native build"
+
+# Builds both WASM variants of @taulabs/replicad-opencascadejs from the C++
+# wrappers with `libcascade build`, then runs the package tests against them.
+# The toolchain image needs more disk than some development machines have, so
+# a change to the wrappers or the build config can be built here. The job
+# uploads `dist/` and its sha256 digests; the committed `dist/` is what
+# publish.yml packs, so copy the artifact into the branch to adopt it.
+on:
+  pull_request:
+    branches:
+      - native-kernel-extensions
+    paths:
+      - "packages/replicad-opencascadejs/build-config/**"
+      - "packages/replicad-opencascadejs/libcascade.config.ts"
+      - ".github/workflows/native-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      # The toolchain image is about 2.4 GB compressed and several times that
+      # unpacked; the runner's preinstalled SDKs are not needed here.
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build single
+        run: pnpm --filter @taulabs/replicad-opencascadejs run buildSingle
+
+      - name: Build multi
+        run: pnpm --filter @taulabs/replicad-opencascadejs run buildMulti
+
+      - name: Assemble
+        run: pnpm --filter @taulabs/replicad-opencascadejs run assemble
+
+      - name: Test
+        run: pnpm --filter @taulabs/replicad-opencascadejs test
+
+      - name: Digests
+        working-directory: packages/replicad-opencascadejs/dist
+        run: sha256sum *.wasm | tee wasm.sha256
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: replicad-opencascadejs-dist
+          path: packages/replicad-opencascadejs/dist/
+          retention-days: 14

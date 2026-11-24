@@ -143,6 +143,25 @@ public:
     return ReplicadExtractFaceMesh<ReplicadPrototypeMeshData>(prototype, skipNormals);
   }
 
+  // `ExtractFaces` with the clean made explicit and an optional user break,
+  // through `ReplicadMeshExtractor::meshWithOptions`: clean=true and a
+  // disabled `ReplicadUserBreak` attach no progress indicator and return the
+  // same data as `ExtractFaces`. A break throws `ReplicadUserBreakError` and
+  // may leave some faces meshed and others not.
+  static ReplicadPrototypeMeshData ExtractFacesWithOptions(
+    const TopoDS_Shape& shape,
+    double tolerance,
+    double angularTolerance,
+    bool skipNormals,
+    bool clean,
+    const ReplicadUserBreak& userBreak
+  ) {
+    const TopoDS_Shape prototype = ReplicadPrototypeShape(shape);
+    ReplicadMeshExtractor::meshWithOptions(
+      prototype, tolerance, angularTolerance, clean, userBreak);
+    return ReplicadExtractFaceMesh<ReplicadPrototypeMeshData>(prototype, skipNormals);
+  }
+
   static ReplicadPrototypeEdgeMeshData ExtractEdges(
     const TopoDS_Shape& shape,
     double tolerance,
