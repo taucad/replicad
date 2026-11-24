@@ -41,9 +41,13 @@ export default class Sketches {
       const solids = this.sketches.map((sketch) =>
         r(sketch.extrudeUntil(limitingFace, extrusionConfig))
       );
-      // The compound takes the solids over; until then a failure deletes them.
+      // The compound takes the solids over once it is built; until then a
+      // failure (including one building the compound) deletes them.
+      const compound = r(compoundShapes(solids));
       solids.forEach((solid) => r.keep(solid));
-      return compoundShapes(solids).asShape3D();
+      const result = compound.asShape3D();
+      r.keep(compound);
+      return result;
     } finally {
       r.dispose();
     }
