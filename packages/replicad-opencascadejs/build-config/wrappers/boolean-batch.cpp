@@ -359,7 +359,14 @@ private:
       Message_ProgressRange progress;
       algorithm.Build(progress);
     }
-    const bool isUserBreak = indicator && indicator->WasBroken();
+    bool isUserBreak = indicator && indicator->WasBroken();
+    // `SimplifyResult` takes no progress range and never polls, so a break
+    // requested after the Boolean's last poll would wait for it to finish.
+    // Ask once more before starting it; a stop here reports exactly like a
+    // stop inside the Boolean. Without an indicator nothing changes.
+    if (simplify && indicator && !isUserBreak && !algorithm.HasErrors()) {
+      isUserBreak = indicator->UserBreak();
+    }
     if (simplify && !algorithm.HasErrors() && !isUserBreak) {
       algorithm.SimplifyResult(true, true, angularTolerance);
     }

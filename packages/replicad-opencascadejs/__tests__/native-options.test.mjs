@@ -312,6 +312,67 @@ for (const runtime of runtimes) {
     }
   });
 
+  test(`${runtime.name}: a break asked after the Boolean's last poll stops before SimplifyResult`, async () => {
+    const oc = await runtime.initialize();
+    const { plate, tools } = holeyPlate(oc, 4);
+    const argumentsList = listOf(oc, [plate]);
+    const toolsList = listOf(oc, tools);
+    const writeBare = (shape) => bytesOf(oc, oc.ReplicadBinaryBrep.Write(shape, false, false));
+    const cut = (simplify, userBreak) =>
+      oc.ReplicadBooleanBatch.CutWithOptions(argumentsList, toolsList, false, 0, simplify, 1e-3, 0, false, userBreak);
+
+    // A disabled break is the plain entry point, bytes included.
+    const disabled = disabledBreak(oc);
+    const plain = oc.ReplicadBooleanBatch.Cut(argumentsList, toolsList, false, 0, true, 1e-3, 0);
+    const unbroken = cut(true, disabled);
+    assert.equal(unbroken.IsDone(), true, unbroken.Errors());
+    assert.equal(unbroken.IsUserBreak(), false);
+    assert.deepEqual(writeBare(unbroken.Shape()), writeBare(plain.Shape()));
+
+    // A hook that never breaks changes nothing either.
+    let polls = 0;
+    oc.replicadUserBreak = () => {
+      polls++;
+      return false;
+    };
+    const byHook = new oc.ReplicadUserBreak(0, 0, true);
+    const asked = cut(true, byHook);
+    assert.equal(asked.IsDone(), true, asked.Errors());
+    assert.deepEqual(writeBare(asked.Shape()), writeBare(plain.Shape()));
+    const withSimplify = polls;
+    polls = 0;
+    const raw = cut(false, byHook);
+    assert.equal(raw.IsDone(), true, raw.Errors());
+    const withoutSimplify = polls;
+
+    if (!oc.ReplicadRuntimeInfo.IsMultiThreaded()) {
+      // Single-threaded, the polls come in a fixed order: the Boolean's, then one more before
+      // SimplifyResult, and none for a call that does not simplify.
+      assert.equal(withSimplify, withoutSimplify + 1);
+      // Break at that last poll only: the Boolean has finished, SimplifyResult must not run, and the
+      // result has the shape of a break inside the Boolean.
+      polls = 0;
+      oc.replicadUserBreak = () => ++polls >= withSimplify;
+      const stopped = cut(true, byHook);
+      assert.equal(polls, withSimplify);
+      assert.equal(stopped.IsUserBreak(), true);
+      assert.equal(stopped.IsDone(), false);
+      assert.equal(stopped.HasErrors(), true);
+      assert.equal(stopped.Errors(), "ReplicadUserBreak");
+      assert.equal(stopped.Shape().IsNull(), true);
+      stopped.delete();
+    } else {
+      // Pool threads interleave with the main thread's polls, so their number varies; the check before
+      // SimplifyResult is still there.
+      assert.ok(withSimplify > 0 && withoutSimplify > 0);
+    }
+
+    delete oc.replicadUserBreak;
+    for (const item of [raw, asked, byHook, unbroken, plain, disabled, toolsList, argumentsList, plate, ...tools]) {
+      item.delete();
+    }
+  });
+
   test(`${runtime.name}: the prototype extractor's ExtractFacesWithOptions matches ExtractFaces and a break stops it`, async () => {
     const oc = await runtime.initialize();
     // A located shape, so the prototype path strips a real location.
