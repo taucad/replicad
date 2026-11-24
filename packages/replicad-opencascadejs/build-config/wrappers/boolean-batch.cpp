@@ -203,18 +203,24 @@ private:
       return Failure("Cut requires at least one argument and one tool");
     }
 
-    BRepAlgoAPI_Cut algorithm;
-    return Run(
-      algorithm,
-      arguments,
-      tools,
-      nonDestructive,
-      glue,
-      simplify,
-      angularTolerance,
-      fuzzyValue,
-      useOBB,
-      indicator);
+    ReplicadBooleanBatchResult result;
+    {
+      BRepAlgoAPI_Cut algorithm;
+      result = Run(
+        algorithm,
+        arguments,
+        tools,
+        nonDestructive,
+        glue,
+        simplify,
+        angularTolerance,
+        fuzzyValue,
+        useOBB,
+        indicator);
+      if (indicator) ReplicadCallProbeHook("algorithm-destroying");
+    }
+    if (indicator) ReplicadCallProbeHook("algorithm-destroyed");
+    return result;
   }
 
   static ReplicadBooleanBatchResult CommonImpl(
@@ -359,6 +365,7 @@ private:
       Message_ProgressRange progress;
       algorithm.Build(progress);
     }
+    if (indicator) ReplicadCallProbeHook("build-returned");
     bool isUserBreak = indicator && indicator->WasBroken();
     // `SimplifyResult` takes no progress range and never polls, so a break
     // requested after the Boolean's last poll would wait for it to finish.
@@ -387,6 +394,7 @@ private:
       !hasErrors && shape.IsNull() ? "Boolean operation produced a null shape" : errors,
       warnings);
     result.isUserBreak_ = isUserBreak;
+    if (indicator) ReplicadCallProbeHook("run-returning");
     return result;
   }
 };
