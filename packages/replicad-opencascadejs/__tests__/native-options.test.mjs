@@ -5,6 +5,7 @@ import { test } from "vitest";
 
 import initMulti from "../dist/replicad_multi.js";
 import initSingle from "../dist/replicad_single.js";
+import { createInstance as createMulti } from "../dist/init.multi.js";
 
 // Covers the additive entry points: binary BRep without triangulation and its
 // identity hash, the mesh extractor's explicit clean, the Boolean batch's OBB
@@ -157,6 +158,71 @@ const writeFileBrep = (oc, shape) => {
 };
 
 const disabledBreak = (oc) => new oc.ReplicadUserBreak(0, 0, false);
+
+// Shared by both variants and by the pthread variant with a one-thread pool.
+const breakBeforeSimplifyResult = (oc) => {
+  const { plate, tools } = holeyPlate(oc, 4);
+  const argumentsList = listOf(oc, [plate]);
+  const toolsList = listOf(oc, tools);
+  const writeBare = (shape) => bytesOf(oc, oc.ReplicadBinaryBrep.Write(shape, false, false));
+  const cut = (simplify, userBreak) =>
+    oc.ReplicadBooleanBatch.CutWithOptions(argumentsList, toolsList, false, 0, simplify, 1e-3, 0, false, userBreak);
+
+  // A disabled break is the plain entry point, bytes included.
+  const disabled = disabledBreak(oc);
+  const plain = oc.ReplicadBooleanBatch.Cut(argumentsList, toolsList, false, 0, true, 1e-3, 0);
+  const unbroken = cut(true, disabled);
+  assert.equal(unbroken.IsDone(), true, unbroken.Errors());
+  assert.equal(unbroken.IsUserBreak(), false);
+  assert.deepEqual(writeBare(unbroken.Shape()), writeBare(plain.Shape()));
+
+  // A hook that never breaks changes nothing either.
+  let polls = 0;
+  oc.replicadUserBreak = () => {
+    polls++;
+    return false;
+  };
+  const byHook = new oc.ReplicadUserBreak(0, 0, true);
+  const asked = cut(true, byHook);
+  assert.equal(asked.IsDone(), true, asked.Errors());
+  assert.deepEqual(writeBare(asked.Shape()), writeBare(plain.Shape()));
+  const withSimplify = polls;
+  polls = 0;
+  const raw = cut(false, byHook);
+  assert.equal(raw.IsDone(), true, raw.Errors());
+  const withoutSimplify = polls;
+
+  if (oc.ReplicadRuntimeInfo.ConfigureThreadPool() === 1) {
+    // The Boolean runs on one thread (the single variant, or the pthread variant with a one-thread
+    // pool), so the polls come in a fixed order: the Boolean's, then one more before
+    // SimplifyResult, and none for a call that does not simplify.
+    assert.equal(withSimplify, withoutSimplify + 1);
+    // Break at that last poll only: the Boolean has finished, SimplifyResult must not run, and the
+    // result has the shape of a break inside the Boolean.
+    polls = 0;
+    oc.replicadUserBreak = () => ++polls >= withSimplify;
+    const stopped = cut(true, byHook);
+    assert.equal(polls, withSimplify);
+    assert.equal(stopped.IsUserBreak(), true);
+    assert.equal(stopped.IsDone(), false);
+    assert.equal(stopped.HasErrors(), true);
+    assert.equal(stopped.Errors(), "ReplicadUserBreak");
+    assert.equal(stopped.Shape().IsNull(), true);
+    stopped.delete();
+  } else {
+    // A parallel Boolean: the hook runs on the main thread only, and how many polls the main thread
+    // makes depends on how the pool shares the work, so no poll can be named as the last one. This
+    // branch asserts only that the hook was polled with and without simplify and (above) that a
+    // hook that never breaks leaves the bytes unchanged; it does not show the check before
+    // SimplifyResult. The one-thread-pool pthread test below covers that check in this variant.
+    assert.ok(withSimplify > 0 && withoutSimplify > 0);
+  }
+
+  delete oc.replicadUserBreak;
+  for (const item of [raw, asked, byHook, unbroken, plain, disabled, toolsList, argumentsList, plate, ...tools]) {
+    item.delete();
+  }
+};
 
 for (const runtime of runtimes) {
   test(`${runtime.name}: binary BRep writes and reads with and without triangulation`, async () => {
@@ -313,64 +379,7 @@ for (const runtime of runtimes) {
   });
 
   test(`${runtime.name}: a break asked after the Boolean's last poll stops before SimplifyResult`, async () => {
-    const oc = await runtime.initialize();
-    const { plate, tools } = holeyPlate(oc, 4);
-    const argumentsList = listOf(oc, [plate]);
-    const toolsList = listOf(oc, tools);
-    const writeBare = (shape) => bytesOf(oc, oc.ReplicadBinaryBrep.Write(shape, false, false));
-    const cut = (simplify, userBreak) =>
-      oc.ReplicadBooleanBatch.CutWithOptions(argumentsList, toolsList, false, 0, simplify, 1e-3, 0, false, userBreak);
-
-    // A disabled break is the plain entry point, bytes included.
-    const disabled = disabledBreak(oc);
-    const plain = oc.ReplicadBooleanBatch.Cut(argumentsList, toolsList, false, 0, true, 1e-3, 0);
-    const unbroken = cut(true, disabled);
-    assert.equal(unbroken.IsDone(), true, unbroken.Errors());
-    assert.equal(unbroken.IsUserBreak(), false);
-    assert.deepEqual(writeBare(unbroken.Shape()), writeBare(plain.Shape()));
-
-    // A hook that never breaks changes nothing either.
-    let polls = 0;
-    oc.replicadUserBreak = () => {
-      polls++;
-      return false;
-    };
-    const byHook = new oc.ReplicadUserBreak(0, 0, true);
-    const asked = cut(true, byHook);
-    assert.equal(asked.IsDone(), true, asked.Errors());
-    assert.deepEqual(writeBare(asked.Shape()), writeBare(plain.Shape()));
-    const withSimplify = polls;
-    polls = 0;
-    const raw = cut(false, byHook);
-    assert.equal(raw.IsDone(), true, raw.Errors());
-    const withoutSimplify = polls;
-
-    if (!oc.ReplicadRuntimeInfo.IsMultiThreaded()) {
-      // Single-threaded, the polls come in a fixed order: the Boolean's, then one more before
-      // SimplifyResult, and none for a call that does not simplify.
-      assert.equal(withSimplify, withoutSimplify + 1);
-      // Break at that last poll only: the Boolean has finished, SimplifyResult must not run, and the
-      // result has the shape of a break inside the Boolean.
-      polls = 0;
-      oc.replicadUserBreak = () => ++polls >= withSimplify;
-      const stopped = cut(true, byHook);
-      assert.equal(polls, withSimplify);
-      assert.equal(stopped.IsUserBreak(), true);
-      assert.equal(stopped.IsDone(), false);
-      assert.equal(stopped.HasErrors(), true);
-      assert.equal(stopped.Errors(), "ReplicadUserBreak");
-      assert.equal(stopped.Shape().IsNull(), true);
-      stopped.delete();
-    } else {
-      // Pool threads interleave with the main thread's polls, so their number varies; the check before
-      // SimplifyResult is still there.
-      assert.ok(withSimplify > 0 && withoutSimplify > 0);
-    }
-
-    delete oc.replicadUserBreak;
-    for (const item of [raw, asked, byHook, unbroken, plain, disabled, toolsList, argumentsList, plate, ...tools]) {
-      item.delete();
-    }
+    breakBeforeSimplifyResult(await runtime.initialize());
   });
 
   test(`${runtime.name}: the prototype extractor's ExtractFacesWithOptions matches ExtractFaces and a break stops it`, async () => {
@@ -429,3 +438,17 @@ for (const runtime of runtimes) {
     }
   });
 }
+
+// The pthread variant's check before SimplifyResult, made deterministic: with a one-thread pool
+// (`threadCount: 1`, a supported configuration of the multi init entry) the Boolean does not run in
+// parallel, so every poll is on the main thread and the last one can be named. The code under test
+// is the pthread build's; what this does not cover is pool threads polling during the Boolean.
+test("pthread with a one-thread pool: a break asked after the Boolean's last poll stops before SimplifyResult", async () => {
+  const oc = await createMulti({
+    locateFile: () => join(distDir, "replicad_multi.wasm"),
+    threadCount: 1,
+  });
+  assert.equal(oc.ReplicadRuntimeInfo.IsMultiThreaded(), true);
+  assert.equal(oc.ReplicadRuntimeInfo.ConfigureThreadPool(), 1);
+  breakBeforeSimplifyResult(oc);
+});
