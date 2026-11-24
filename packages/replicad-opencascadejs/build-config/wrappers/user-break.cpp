@@ -40,8 +40,16 @@ inline bool ReplicadCallUserBreakHook() {
   if (hook.typeOf().as<std::string>() != "function") return false;
   return hook().as<bool>();
 }
+// Measurement probe only (never merged): report progress scope names to JS.
+inline void ReplicadCallProgressShowHook(const std::string& chain, double position) {
+  const emscripten::val hook =
+    emscripten::val::module_property("replicadProgressShow");
+  if (hook.typeOf().as<std::string>() != "function") return;
+  hook(chain, position);
+}
 #else
 inline bool ReplicadCallUserBreakHook() { return false; }
+inline void ReplicadCallProgressShowHook(const std::string&, double) {}
 #endif
 #if defined(__EMSCRIPTEN_PTHREADS__) && __has_include(<emscripten/threading.h>)
 #include <emscripten/threading.h>
@@ -118,7 +126,18 @@ public:
   bool WasBroken() const { return broken_.load(std::memory_order_relaxed); }
 
 protected:
-  void Show(const Message_ProgressScope&, const bool) override {}
+  void Show(const Message_ProgressScope& scope, const bool) override {
+    if (!IsMainRuntimeThread()) return;
+    std::string chain;
+    for (const Message_ProgressScope* current = &scope; current != nullptr;
+         current = current->Parent()) {
+      const char* name = current->Name();
+      chain = std::string(name ? name : "-") + (chain.empty() ? "" : "/") + chain;
+    }
+    if (chain == lastChain_) return;
+    lastChain_ = chain;
+    ReplicadCallProgressShowHook(chain, GetPosition());
+  }
 
 private:
   static bool IsMainRuntimeThread() {
@@ -133,6 +152,7 @@ private:
   const int32_t expected_;
   const bool useHook_;
   std::atomic<bool> broken_;
+  std::string lastChain_;
 };
 
 inline Handle(ReplicadUserBreakIndicator) ReplicadMakeUserBreakIndicator(
