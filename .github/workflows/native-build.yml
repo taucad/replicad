@@ -13,6 +13,8 @@ on:
     paths:
       - "packages/replicad-opencascadejs/build-config/**"
       - "packages/replicad-opencascadejs/libcascade.config.ts"
+      - "packages/replicad-opencascadejs/package.json"
+      - "packages/replicad-opencascadejs/__tests__/**"
       - ".github/workflows/native-build.yml"
   workflow_dispatch:
 
