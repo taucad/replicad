@@ -602,9 +602,12 @@ export const makeOffset = (
 
 export const compoundShapes = (shapeArray: AnyShape[]): AnyShape => {
   const oc = getOC();
-  const builder = new oc.TopoDS_Builder();
-  const compound = new oc.TopoDS_Compound();
+  const r = ocScope();
   try {
+    const builder = r(new oc.TopoDS_Builder());
+    // The scope owns the compound until the cast has adopted it: a failure
+    // building or casting it (a user break can interrupt any call) deletes it.
+    const compound = r(new oc.TopoDS_Compound());
     builder.MakeCompound(compound);
 
     // A failure leaves the shapes not yet added to the caller.
@@ -612,15 +615,13 @@ export const compoundShapes = (shapeArray: AnyShape[]): AnyShape => {
       builder.Add(compound, s.wrapped);
       s.delete();
     });
-  } catch (error) {
-    compound.delete();
-    throw error;
-  } finally {
-    builder.delete();
-  }
 
-  const newShape = cast(compound);
-  return newShape;
+    const newShape = cast(compound);
+    r.keep(compound);
+    return newShape;
+  } finally {
+    r.dispose();
+  }
 };
 
 export const makeCompound = compoundShapes;
